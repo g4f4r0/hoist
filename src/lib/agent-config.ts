@@ -86,6 +86,7 @@ function generateInstructions(config?: ProjectConfig): string {
 function generateClaudeSkill(config?: ProjectConfig): string {
   const lines: string[] = [
     "---",
+    "name: hoist",
     "description: Use Hoist CLI to manage servers, deploy apps, manage databases, and configure infrastructure. Trigger when the user asks about deploying, provisioning servers, managing databases, or infrastructure tasks.",
     "---",
     "",
@@ -215,23 +216,23 @@ export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] 
     written.push("AGENTS.md");
   }
 
-  const claudeSkillDir = path.join(dir, ".claude", "skills");
+  const claudeSkillDir = path.join(dir, ".claude", "skills", "hoist");
   fs.mkdirSync(claudeSkillDir, { recursive: true });
   fs.writeFileSync(
-    path.join(claudeSkillDir, "hoist.md"),
+    path.join(claudeSkillDir, "SKILL.md"),
     generateClaudeSkill(config),
     "utf-8"
   );
-  written.push(".claude/skills/hoist.md");
+  written.push(".claude/skills/hoist/SKILL.md");
 
-  const codexSkillDir = path.join(dir, ".codex");
+  const codexSkillDir = path.join(dir, ".agents", "skills", "hoist");
   fs.mkdirSync(codexSkillDir, { recursive: true });
   fs.writeFileSync(
     path.join(codexSkillDir, "SKILL.md"),
     generateCodexSkill(config),
     "utf-8"
   );
-  written.push(".codex/SKILL.md");
+  written.push(".agents/skills/hoist/SKILL.md");
 
   return written;
 }
