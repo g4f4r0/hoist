@@ -228,8 +228,8 @@ hoist status                  # Full project overview
 hoist doctor                  # Health check everything
 hoist keys show|rotate        # SSH key management
 hoist config validate         # Validate hoist.json
-hoist sync                    # Regenerate agent config files
-hoist update                  # Update hoist-cli to latest version
+hoist update                  # Update skill files + check for CLI updates
+hoist --status                # Quick overview: version, auth, providers
 ```
 
 All commands support `--json` and `--yes`.
@@ -238,15 +238,14 @@ All commands support `--json` and `--yes`.
 
 ## Agent Integration
 
-Hoist auto-generates configuration files so any AI agent understands your infrastructure:
+Hoist generates skill files so AI agents understand your infrastructure:
 
-| Agent | File |
-|-------|------|
-| Claude Code | `.claude/skills/hoist/SKILL.md` |
-| Codex | `.agents/skills/hoist/SKILL.md` |
-| Cursor, Windsurf, Copilot, Gemini | `AGENTS.md` |
+| Agent | Files |
+|-------|-------|
+| Claude Code | `.claude/skills/hoist/SKILL.md`, `COMMANDS.md` |
+| Codex | `.agents/skills/hoist/SKILL.md`, `COMMANDS.md` |
 
-Run `hoist init` or `hoist sync` to generate these files.
+Run `hoist init` or `hoist update` to generate these files. Hoist never modifies your CLAUDE.md or AGENTS.md.
 
 ---
 

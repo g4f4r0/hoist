@@ -1,68 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
-import { type ProjectConfig, isAppService } from "./project-config.js";
-
-const MARKER_START = "<!-- hoist:start -->";
-const MARKER_END = "<!-- hoist:end -->";
-
-function detectTargetFile(dir: string): "CLAUDE.md" | "AGENTS.md" {
-  if (fs.existsSync(path.join(dir, "CLAUDE.md"))) return "CLAUDE.md";
-  if (fs.existsSync(path.join(dir, "AGENTS.md"))) return "AGENTS.md";
-  if (process.env.CLAUDE_PROJECT_DIR) return "CLAUDE.md";
-  return "AGENTS.md";
-}
-
-function generateInstructions(config?: ProjectConfig): string {
-  const lines: string[] = [
-    MARKER_START,
-    "## Hoist — Infrastructure CLI",
-    "",
-    "Manages servers, deployments, databases, domains, and env vars on Hetzner, Vultr, DigitalOcean.",
-    "Always use `--json` for structured output. Use `--yes` to skip confirmations.",
-    "",
-    "### Sensitive Operations — Human in the Loop",
-    "",
-    "**NEVER run these commands.** Tell the user to run them — they require interactive API key input:",
-    "`hoist init`, `hoist provider add`, `hoist provider update`",
-    "",
-    "### Workflow",
-    "",
-    "1. Ensure user has run `hoist init`",
-    "2. Create `hoist.json` with servers and services",
-    "3. `hoist server create --json --yes`",
-    "4. `hoist deploy --json --yes`",
-    "5. `hoist status --json` to verify",
-    "",
-    "Parse stdout for JSON. Exit code 0 = success, 1 = error. Run `hoist doctor --json` to diagnose issues.",
-  ];
-
-  if (config) {
-    lines.push("");
-    lines.push("### Current Project");
-    lines.push("");
-
-    for (const name of Object.keys(config.servers)) {
-      const s = config.servers[name];
-      lines.push(`- Server **${name}**: provider \`${s.provider}\``);
-    }
-
-    for (const [name, svc] of Object.entries(config.services)) {
-      if (isAppService(svc)) {
-        const domain = svc.domain ? ` (${svc.domain})` : "";
-        lines.push(`- App **${name}**: port ${svc.port} on ${svc.server}${domain}`);
-      } else {
-        lines.push(`- Database **${name}**: ${svc.type} ${svc.version} on ${svc.server}`);
-      }
-    }
-  }
-
-  lines.push(MARKER_END);
-  return lines.join("\n");
-}
-
-function generateClaudeSkill(config?: ProjectConfig): string {
-  const lines: string[] = [
+function generateClaudeSkill(): string {
+  return [
     "---",
     "name: managing-infrastructure",
     "description: Deploys and manages apps, servers, databases, domains, and environment variables on VPS providers (Hetzner, Vultr, DigitalOcean) using the Hoist CLI. Triggers when user mentions deploying, provisioning servers, creating databases, configuring domains, managing env vars, or checking infrastructure health.",
@@ -143,6 +84,23 @@ function generateClaudeSkill(config?: ProjectConfig): string {
     "",
     "---",
     "",
+    "## Project Config",
+    "",
+    "Read `hoist.json` in the project root for current project context (servers, services, domains).",
+    "",
+    "```json",
+    "{",
+    '  "project": "my-app",',
+    '  "servers": { "prod": { "provider": "hetzner-1" } },',
+    '  "services": {',
+    '    "api": { "server": "prod", "type": "app", "source": ".", "port": 3000 },',
+    '    "db": { "server": "prod", "type": "postgres", "version": "16" }',
+    "  }",
+    "}",
+    "```",
+    "",
+    "---",
+    "",
     "## Interactive Deployment Procedure",
     "",
     "Ask the user for each parameter before proceeding:",
@@ -173,23 +131,6 @@ function generateClaudeSkill(config?: ProjectConfig): string {
     "",
     "---",
     "",
-    "## hoist.json",
-    "",
-    "Servers only need `provider`. Server specs (type, region) live on the provider, not in project config.",
-    "",
-    "```json",
-    "{",
-    '  "project": "my-app",',
-    '  "servers": { "prod": { "provider": "hetzner-1" } },',
-    '  "services": {',
-    '    "api": { "server": "prod", "type": "app", "source": ".", "port": 3000 },',
-    '    "db": { "server": "prod", "type": "postgres", "version": "16" }',
-    "  }",
-    "}",
-    "```",
-    "",
-    "---",
-    "",
     "## Error Reference",
     "",
     "| Error | Solution |",
@@ -210,31 +151,8 @@ function generateClaudeSkill(config?: ProjectConfig): string {
     "3. Parse stdout for JSON, check exit code (0 = ok, 1 = error)",
     "4. Run `hoist doctor --json` to diagnose any issue",
     "5. Server names in hoist.json must match what was used during creation",
-  ];
-
-  if (config) {
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-    lines.push("## Current Project");
-    lines.push("");
-    lines.push(`Project: **${config.project}**`);
-    lines.push("");
-    for (const [name, s] of Object.entries(config.servers)) {
-      lines.push(`- Server \`${name}\`: provider \`${s.provider}\``);
-    }
-    for (const [name, svc] of Object.entries(config.services)) {
-      if (isAppService(svc)) {
-        const domain = svc.domain ? ` → ${svc.domain}` : "";
-        lines.push(`- App \`${name}\`: port ${svc.port} on ${svc.server}${domain}`);
-      } else {
-        lines.push(`- DB \`${name}\`: ${svc.type} ${svc.version} on ${svc.server}`);
-      }
-    }
-  }
-
-  lines.push("");
-  return lines.join("\n");
+    "",
+  ].join("\n");
 }
 
 function generateCommandsReference(): string {
@@ -313,7 +231,7 @@ function generateCommandsReference(): string {
   ].join("\n");
 }
 
-function generateCodexSkill(config?: ProjectConfig): string {
+function generateCodexSkill(): string {
   const lines: string[] = [
     "---",
     "name: managing-infrastructure",
@@ -322,54 +240,22 @@ function generateCodexSkill(config?: ProjectConfig): string {
     "",
   ];
 
-  lines.push(generateClaudeSkill(config).replace(/^---[\s\S]*?---\n\n/, ""));
+  lines.push(generateClaudeSkill().replace(/^---[\s\S]*?---\n\n/, ""));
 
   return lines.join("\n");
 }
 
-function upsertMarkerContent(filePath: string, content: string): void {
-  if (fs.existsSync(filePath)) {
-    const existing = fs.readFileSync(filePath, "utf-8");
-    const startIdx = existing.indexOf(MARKER_START);
-    const endIdx = existing.indexOf(MARKER_END);
-
-    if (startIdx !== -1 && endIdx !== -1) {
-      const before = existing.slice(0, startIdx);
-      const after = existing.slice(endIdx + MARKER_END.length);
-      fs.writeFileSync(filePath, before + content + after, "utf-8");
-    } else {
-      const separator = existing.endsWith("\n") ? "\n" : "\n\n";
-      fs.writeFileSync(filePath, existing + separator + content + "\n", "utf-8");
-    }
-  } else {
-    fs.writeFileSync(filePath, content + "\n", "utf-8");
-  }
-}
-
-/** Writes agent configuration files for AI coding tools. */
-export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] {
+/** Writes skill files globally to ~/.claude/ and ~/.agents/. */
+export function writeAgentConfig(): string[] {
+  const home = os.homedir();
   const written: string[] = [];
-  const instructions = generateInstructions(config);
 
-  const targetFile = detectTargetFile(dir);
-  const targetPath = path.join(dir, targetFile);
-  upsertMarkerContent(targetPath, instructions);
-  written.push(targetFile);
-
-  if (targetFile === "AGENTS.md" && fs.existsSync(path.join(dir, "CLAUDE.md"))) {
-    upsertMarkerContent(path.join(dir, "CLAUDE.md"), instructions);
-    written.push("CLAUDE.md");
-  } else if (targetFile === "CLAUDE.md" && fs.existsSync(path.join(dir, "AGENTS.md"))) {
-    upsertMarkerContent(path.join(dir, "AGENTS.md"), instructions);
-    written.push("AGENTS.md");
-  }
-
-  // Claude skill: SKILL.md + COMMANDS.md (progressive disclosure)
-  const claudeSkillDir = path.join(dir, ".claude", "skills", "hoist");
+  // Claude skill: ~/.claude/skills/hoist/
+  const claudeSkillDir = path.join(home, ".claude", "skills", "hoist");
   fs.mkdirSync(claudeSkillDir, { recursive: true });
   fs.writeFileSync(
     path.join(claudeSkillDir, "SKILL.md"),
-    generateClaudeSkill(config),
+    generateClaudeSkill(),
     "utf-8"
   );
   fs.writeFileSync(
@@ -377,15 +263,15 @@ export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] 
     generateCommandsReference(),
     "utf-8"
   );
-  written.push(".claude/skills/hoist/SKILL.md");
-  written.push(".claude/skills/hoist/COMMANDS.md");
+  written.push("~/.claude/skills/hoist/SKILL.md");
+  written.push("~/.claude/skills/hoist/COMMANDS.md");
 
-  // Codex skill: SKILL.md + COMMANDS.md
-  const codexSkillDir = path.join(dir, ".agents", "skills", "hoist");
+  // Codex skill: ~/.agents/skills/hoist/
+  const codexSkillDir = path.join(home, ".agents", "skills", "hoist");
   fs.mkdirSync(codexSkillDir, { recursive: true });
   fs.writeFileSync(
     path.join(codexSkillDir, "SKILL.md"),
-    generateCodexSkill(config),
+    generateCodexSkill(),
     "utf-8"
   );
   fs.writeFileSync(
@@ -393,8 +279,8 @@ export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] 
     generateCommandsReference(),
     "utf-8"
   );
-  written.push(".agents/skills/hoist/SKILL.md");
-  written.push(".agents/skills/hoist/COMMANDS.md");
+  written.push("~/.agents/skills/hoist/SKILL.md");
+  written.push("~/.agents/skills/hoist/COMMANDS.md");
 
   return written;
 }

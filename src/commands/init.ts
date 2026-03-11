@@ -109,7 +109,7 @@ export const initCommand = new Command("init")
 
     updateConfig(config);
 
-    const written = writeAgentConfig(process.cwd());
+    const written = writeAgentConfig();
     p.log.success(`Agent config written: ${written.join(", ")}`);
 
     const providerCount = Object.keys(config.providers).length;

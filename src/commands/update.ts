@@ -7,17 +7,36 @@ import * as p from "@clack/prompts";
 import chalk from "chalk";
 
 import { checkForUpdate } from "../lib/version-check.js";
+import { writeAgentConfig } from "../lib/agent-config.js";
 import { outputJson, outputError, outputSuccess } from "../lib/output.js";
 
 export const updateCommand = new Command("update")
-  .description("Update hoist-cli to the latest version")
+  .description("Update agent skill files and check for CLI updates")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
     const current = __VERSION__;
 
+    // 1. Update skill files
+    try {
+      const written = writeAgentConfig();
+
+      if (!opts.json) {
+        for (const file of written) {
+          p.log.success(`${chalk.bold(file)} synced`);
+        }
+      }
+    } catch (err) {
+      outputError(
+        "Failed to write agent skill files",
+        err instanceof Error ? err.message : err
+      );
+      process.exit(1);
+    }
+
+    // 2. Check for CLI updates
     if (!opts.json) {
       const spinner = p.spinner();
-      spinner.start("Checking for updates...");
+      spinner.start("Checking for CLI updates...");
       const result = await checkForUpdate(current);
       spinner.stop(
         result
@@ -26,7 +45,7 @@ export const updateCommand = new Command("update")
       );
 
       if (!result || !result.updateAvailable) {
-        outputSuccess("Already on the latest version.");
+        outputSuccess("Skills updated. CLI already on the latest version.");
         return;
       }
 
@@ -37,36 +56,33 @@ export const updateCommand = new Command("update")
       try {
         p.log.step("Running npm install -g hoist-cli...");
         execSync("npm install -g hoist-cli@latest", { stdio: "inherit" });
-        outputSuccess(`Updated to ${result.latest}`);
+        outputSuccess(`Skills updated. CLI updated to ${result.latest}.`);
       } catch (err) {
         outputError(
-          "Update failed",
+          "CLI update failed",
           err instanceof Error ? err.message : err
         );
         process.exit(1);
       }
     } else {
       const result = await checkForUpdate(current);
-      if (!result) {
-        outputJson({ current, latest: null, updateAvailable: false });
-        return;
-      }
-      if (!result.updateAvailable) {
-        outputJson({ current, latest: result.latest, updateAvailable: false });
+      if (!result || !result.updateAvailable) {
+        outputJson({
+          skills: "updated",
+          cli: { current, latest: result?.latest ?? current, updated: false },
+        });
         return;
       }
 
       try {
         execSync("npm install -g hoist-cli@latest", { stdio: "pipe" });
         outputJson({
-          current,
-          latest: result.latest,
-          updateAvailable: true,
-          updated: true,
+          skills: "updated",
+          cli: { current, latest: result.latest, updated: true },
         });
       } catch (err) {
         outputError(
-          "Update failed",
+          "CLI update failed",
           err instanceof Error ? err.message : err
         );
         process.exit(1);

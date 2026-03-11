@@ -12,12 +12,12 @@ import { templateCommand } from "./commands/template.js";
 import { envCommand } from "./commands/env.js";
 import { logsCommand } from "./commands/logs.js";
 import { rollbackCommand } from "./commands/rollback.js";
-import { syncCommand } from "./commands/sync.js";
 import { updateCommand } from "./commands/update.js";
 import { keysCommand } from "./commands/keys.js";
 import { configCommand } from "./commands/config.js";
 import { closeAll } from "./lib/ssh.js";
 import { checkForUpdate } from "./lib/version-check.js";
+import { showStatus } from "./lib/status-check.js";
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
@@ -29,7 +29,8 @@ program
   .description(
     "Hoist your apps to production. Let your AI agent handle the rest."
   )
-  .version(VERSION);
+  .version(VERSION)
+  .option("--status", "Show version, auth, and provider status");
 
 program.addCommand(initCommand);
 program.addCommand(providerCommand);
@@ -42,7 +43,6 @@ program.addCommand(templateCommand);
 program.addCommand(envCommand);
 program.addCommand(logsCommand);
 program.addCommand(rollbackCommand);
-program.addCommand(syncCommand);
 program.addCommand(updateCommand);
 program.addCommand(keysCommand);
 program.addCommand(configCommand);
@@ -55,6 +55,11 @@ process.on("SIGTERM", () => {
   closeAll();
   process.exit(143);
 });
+
+if (process.argv.includes("--status")) {
+  await showStatus(VERSION);
+  process.exit(0);
+}
 
 const updateCheck = checkForUpdate(VERSION);
 
