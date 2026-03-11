@@ -10,6 +10,7 @@ import { dbCommand } from "./commands/db.js";
 import { templateCommand } from "./commands/template.js";
 import { envCommand } from "./commands/env.js";
 import { logsCommand } from "./commands/logs.js";
+import { rollbackCommand } from "./commands/rollback.js";
 
 const program = new Command();
 
@@ -31,5 +32,6 @@ program.addCommand(dbCommand);
 program.addCommand(templateCommand);
 program.addCommand(envCommand);
 program.addCommand(logsCommand);
+program.addCommand(rollbackCommand);
 
 program.parse();

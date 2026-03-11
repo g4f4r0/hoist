@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+
 import { loadProjectConfig, isAppService, type AppServiceConfig } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
@@ -19,9 +20,11 @@ interface DeployResult {
 export const deployCommand = new Command("deploy")
   .description("Deploy services to servers")
   .option("--service <name>", "Deploy a specific service")
+  .option("--repo <url>", "Deploy from a git repository URL")
+  .option("--branch <branch>", "Git branch to deploy", "main")
   .option("--json", "Output as JSON")
   .option("--yes", "Skip confirmations")
-  .action(async (opts: { service?: string; json?: boolean; yes?: boolean }) => {
+  .action(async (opts: { service?: string; repo?: string; branch: string; json?: boolean; yes?: boolean }) => {
     let config;
     try {
       config = loadProjectConfig();
@@ -101,6 +104,8 @@ export const deployCommand = new Command("deploy")
           serviceName: name,
           service,
           sourceDir: process.cwd(),
+          repo: opts.repo,
+          branch: opts.branch,
           onLog: (msg) => {
             if (!opts.json) spinner.message(msg);
           },
@@ -133,7 +138,6 @@ export const deployCommand = new Command("deploy")
 
     if (failed.length > 0) {
       outputError(`${failed.length} service(s) failed to deploy`);
-      if (failed.length < results.length) process.exit(1);
       process.exit(1);
     }
 

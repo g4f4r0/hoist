@@ -4,13 +4,16 @@ import path from "node:path";
 import { exec, execOrFail, type SSHConnectionOptions } from "./ssh.js";
 import { uploadDirectory } from "./transfer.js";
 import { addRoute, updateRouteUpstream } from "./caddy.js";
-import type { AppServiceConfig, HealthCheckConfig } from "./project-config.js";
+import { containerName, imageName, buildDockerRunCmd, checkContainerHealth } from "./container.js";
+import type { AppServiceConfig } from "./project-config.js";
 
 export interface DeployOptions {
   ssh: SSHConnectionOptions;
   serviceName: string;
   service: AppServiceConfig;
   sourceDir: string;
+  repo?: string;
+  branch?: string;
   onLog?: (msg: string) => void;
 }
 
@@ -22,20 +25,16 @@ export interface DeployResult {
   url: string;
 }
 
-const HEALTH_CHECK_RETRIES = 10;
-const HEALTH_CHECK_DELAY_MS = 3000;
-const DEFAULT_WAIT_MS = 5000;
-
-function containerName(serviceName: string): string {
-  return `hoist-${serviceName}`;
-}
-
-function imageName(serviceName: string): string {
-  return `hoist-${serviceName}`;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function cloneRepository(
+  ssh: SSHConnectionOptions,
+  repo: string,
+  branch: string,
+  targetDir: string,
+  onLog?: (msg: string) => void
+): Promise<void> {
+  const log = onLog ?? (() => {});
+  log(`Cloning ${repo} (branch: ${branch})`);
+  await execOrFail(ssh, `git clone --depth 1 --branch ${branch} ${repo} ${targetDir}`, (data) => log(data));
 }
 
 async function isFirstDeploy(
@@ -49,61 +48,13 @@ async function isFirstDeploy(
   return result.code !== 0;
 }
 
-async function checkContainerHealth(
-  ssh: SSHConnectionOptions,
-  container: string,
-  port: number,
-  healthCheck?: HealthCheckConfig
-): Promise<void> {
-  if (!healthCheck) {
-    await sleep(DEFAULT_WAIT_MS);
-    const result = await exec(
-      ssh,
-      `docker inspect ${container} --format '{{.State.Status}}'`
-    );
-    if (result.code !== 0 || result.stdout.trim() !== "running") {
-      throw new Error(`Container ${container} is not running after startup`);
-    }
-    return;
-  }
-
-  const delayMs = healthCheck.interval ? healthCheck.interval * 1000 : HEALTH_CHECK_DELAY_MS;
-
-  for (let i = 0; i < HEALTH_CHECK_RETRIES; i++) {
-    await sleep(delayMs);
-    const result = await exec(
-      ssh,
-      `docker exec ${container} wget -q -O- http://localhost:${port}${healthCheck.path}`
-    );
-    if (result.code === 0) return;
-  }
-
-  throw new Error(
-    `Health check failed for ${container} after ${HEALTH_CHECK_RETRIES} attempts on :${port}${healthCheck.path}`
-  );
-}
-
-function buildDockerRunArgs(
+function buildRunCmd(
   serviceName: string,
   env: Record<string, string>,
   container?: string
 ): string {
   const name = container ?? containerName(serviceName);
-  const parts = [
-    "docker run -d",
-    `--name ${name}`,
-    "--network hoist",
-    "--restart unless-stopped",
-  ];
-
-  for (const [key, value] of Object.entries(env)) {
-    const escaped = value.replace(/'/g, "'\\''");
-    parts.push(`-e '${key}=${escaped}'`);
-  }
-
-  parts.push(`${imageName(serviceName)}:latest`);
-
-  return parts.join(" ");
+  return buildDockerRunCmd(name, `${imageName(serviceName)}:latest`, env);
 }
 
 /** Parses a .env file into key-value pairs, skipping comments and empty lines. */
@@ -155,8 +106,12 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
     env = loadEnvFile(envPath);
   }
 
-  log(`Uploading source to ${buildDir}`);
-  await uploadDirectory(ssh, sourceDir, buildDir);
+  if (opts.repo) {
+    await cloneRepository(ssh, opts.repo, opts.branch ?? "main", buildDir, onLog);
+  } else {
+    log(`Uploading source to ${buildDir}`);
+    await uploadDirectory(ssh, sourceDir, buildDir);
+  }
 
   log(`Building image ${image}`);
   await execOrFail(
@@ -170,7 +125,7 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
   try {
     if (firstDeploy) {
       log("First deploy — starting container");
-      const runCmd = buildDockerRunArgs(serviceName, env);
+      const runCmd = buildRunCmd(serviceName, env);
       await execOrFail(ssh, runCmd);
 
       log("Checking container health");
@@ -187,7 +142,7 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
       await exec(ssh, `docker rm -f ${newContainer} 2>/dev/null`);
 
       log(`Starting new container: ${newContainer}`);
-      const runCmd = buildDockerRunArgs(serviceName, env, newContainer);
+      const runCmd = buildRunCmd(serviceName, env, newContainer);
       await execOrFail(ssh, runCmd);
 
       log("Checking new container health");
