@@ -1,21 +1,21 @@
 import { Command } from "commander";
 
 import { resolveServer } from "../lib/server-resolve.js";
-import { loadProjectConfig } from "../lib/project-config.js";
+import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
 import { exec, closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { outputJson, outputError } from "../lib/output.js";
 
 export const logsCommand = new Command("logs")
   .description("View container logs")
   .argument("<service>", "Service name")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--lines <n>", "Number of lines", "100")
   .option("--follow", "Follow log output")
   .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
-      opts: { server: string; lines: string; follow?: boolean; json?: boolean }
+      opts: { server?: string; lines: string; follow?: boolean; json?: boolean }
     ) => {
       if (opts.follow && opts.json) {
         outputError("--json is incompatible with --follow");
@@ -30,15 +30,23 @@ export const logsCommand = new Command("logs")
         process.exit(1);
       }
 
-      const serverConfig = config.servers[opts.server];
+      let serverName;
+      try {
+        serverName = getDefaultServer(config, opts.server);
+      } catch (err) {
+        outputError(err instanceof Error ? err.message : "Failed to resolve server");
+        process.exit(1);
+      }
+
+      const serverConfig = config.servers[serverName];
       if (!serverConfig) {
-        outputError(`Server "${opts.server}" not found in hoist.json`);
+        outputError(`Server "${serverName}" not found in hoist.json`);
         process.exit(1);
       }
 
       let server;
       try {
-        server = await resolveServer(opts.server, serverConfig);
+        server = await resolveServer(serverName, serverConfig);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to resolve server");
         process.exit(1);
@@ -78,7 +86,7 @@ export const logsCommand = new Command("logs")
           if (opts.json) {
             outputJson({
               service,
-              server: opts.server,
+              server: serverName,
               lines: result.stdout.split("\n"),
             });
           } else {

@@ -126,6 +126,7 @@ These tables are guidance for domain operations, not an exhaustive allowlist. St
 - **Container env management**: Read env via `docker inspect`, update by stop/rm/run with new env (Docker doesn't support live env updates). See `src/lib/container-env.ts`.
 - **All provider API helpers** follow the same shape: `api()` returns raw Response, `apiJson<T>()` returns parsed and throws on auth errors.
 - **Server setup is idempotent**: Uses `which X || install X` and `docker inspect X || docker run X` patterns so it can be re-run safely.
+- **Smart server defaulting**: Commands with `--server` auto-pick the only server if config has just one. Use `getDefaultServer()` from project-config.ts.
 - **Stateless design**: No local database. Server list comes from provider APIs (filtered by hoist tags). Server state comes from SSH. Config is just credentials and defaults.
 - **Dual-mode output**: `--json` sends structured JSON to stdout. Human output goes to stderr via chalk. Every command supports both.
 

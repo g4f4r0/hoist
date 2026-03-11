@@ -1,4 +1,5 @@
 import { Command } from "commander";
+
 import { initCommand } from "./commands/init.js";
 import { providerCommand } from "./commands/provider.js";
 import { serverCommand } from "./commands/server.js";
@@ -11,6 +12,7 @@ import { templateCommand } from "./commands/template.js";
 import { envCommand } from "./commands/env.js";
 import { logsCommand } from "./commands/logs.js";
 import { rollbackCommand } from "./commands/rollback.js";
+import { closeAll } from "./lib/ssh.js";
 
 const program = new Command();
 
@@ -33,5 +35,14 @@ program.addCommand(templateCommand);
 program.addCommand(envCommand);
 program.addCommand(logsCommand);
 program.addCommand(rollbackCommand);
+
+process.on("SIGINT", () => {
+  closeAll();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  closeAll();
+  process.exit(143);
+});
 
 program.parse();

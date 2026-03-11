@@ -46,21 +46,39 @@ async function rollbackService(
     throw new Error(`No previous image found for ${serviceName}. Nothing to roll back to.`);
   }
 
-  log("Reading current container environment");
-  const env = await listEnv(ssh, serviceName);
+  const containerExists = (await exec(ssh, `docker inspect ${name} 2>/dev/null`)).code === 0;
 
-  log("Stopping current container");
-  await execOrFail(ssh, `docker stop ${name}`);
-  await execOrFail(ssh, `docker rm ${name}`);
+  let env: Record<string, string> = {};
+  if (containerExists) {
+    log("Reading current container environment");
+    env = await listEnv(ssh, serviceName);
+
+    log("Stopping current container");
+    await execOrFail(ssh, `docker stop ${name}`);
+    await execOrFail(ssh, `docker rm ${name}`);
+  } else {
+    log("No running container found, starting fresh from previous image");
+  }
 
   log("Swapping image tags");
-  await execOrFail(ssh, `docker tag ${image}:latest ${image}:rollback-backup`);
-  await execOrFail(ssh, `docker tag ${image}:previous ${image}:latest`);
-  await execOrFail(ssh, `docker tag ${image}:rollback-backup ${image}:previous`);
-  await exec(ssh, `docker rmi ${image}:rollback-backup`);
+  const hasLatest = (await exec(ssh, `docker image inspect ${image}:latest 2>/dev/null`)).code === 0;
+  if (hasLatest) {
+    await execOrFail(ssh, `docker tag ${image}:latest ${image}:rollback-backup`);
+    await execOrFail(ssh, `docker tag ${image}:previous ${image}:latest`);
+    await execOrFail(ssh, `docker tag ${image}:rollback-backup ${image}:previous`);
+    await exec(ssh, `docker rmi ${image}:rollback-backup`);
+  } else {
+    await execOrFail(ssh, `docker tag ${image}:previous ${image}:latest`);
+  }
 
   log("Starting container from previous image");
   await execOrFail(ssh, buildDockerRunCmd(name, `${image}:latest`, env));
+
+  log("Verifying container is running");
+  const inspect = await exec(ssh, `docker inspect --format '{{.State.Running}}' ${name}`);
+  if (inspect.code !== 0 || inspect.stdout.trim() !== "true") {
+    throw new Error(`Container ${name} failed to start after rollback`);
+  }
 
   log("Checking container health");
   await checkContainerHealth(ssh, name, service.port, service.healthCheck);

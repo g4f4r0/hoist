@@ -5,19 +5,20 @@ import chalk from "chalk";
 import { listEnv, recreateWithEnv, parseEnvArgs } from "../lib/container-env.js";
 import { loadEnvFile } from "../lib/deploy.js";
 import { resolveServer } from "../lib/server-resolve.js";
-import { loadProjectConfig } from "../lib/project-config.js";
+import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { outputJson, outputError, outputSuccess } from "../lib/output.js";
 
 export const envCommand = new Command("env").description("Manage service environment variables");
 
-function loadConfigAndResolveServer(serverName: string) {
+function loadConfigAndResolveServer(specified?: string) {
   const config = loadProjectConfig();
+  const serverName = getDefaultServer(config, specified);
   const serverConfig = config.servers[serverName];
   if (!serverConfig) {
     throw new Error(`Server "${serverName}" not found in hoist.json`);
   }
-  return { config, serverConfig };
+  return { config, serverConfig, serverName };
 }
 
 envCommand
@@ -25,19 +26,19 @@ envCommand
   .description("Set environment variables on a service")
   .argument("<service>", "Service name")
   .argument("[vars...]", "KEY=VALUE pairs")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       vars: string[],
-      opts: { server: string; json?: boolean }
+      opts: { server?: string; json?: boolean }
     ) => {
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig } = loadConfigAndResolveServer(opts.server);
-        const server = await resolveServer(opts.server, serverConfig);
+        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const newEnv = parseEnvArgs(vars);
@@ -53,7 +54,7 @@ envCommand
 
         const updated = Object.keys(newEnv);
         if (opts.json) {
-          outputJson({ service, server: opts.server, updated });
+          outputJson({ service, server: serverName, updated });
         } else {
           outputSuccess(`Set ${updated.join(", ")} on ${service}`);
         }
@@ -74,19 +75,19 @@ envCommand
   .description("Get the value of an environment variable")
   .argument("<service>", "Service name")
   .argument("<key>", "Environment variable key")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       key: string,
-      opts: { server: string; json?: boolean }
+      opts: { server?: string; json?: boolean }
     ) => {
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig } = loadConfigAndResolveServer(opts.server);
-        const server = await resolveServer(opts.server, serverConfig);
+        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const env = await listEnv(ssh, service);
@@ -118,19 +119,19 @@ envCommand
   .command("list")
   .description("List environment variables for a service")
   .argument("<service>", "Service name")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .option("--show-values", "Show actual values instead of masking")
   .action(
     async (
       service: string,
-      opts: { server: string; json?: boolean; showValues?: boolean }
+      opts: { server?: string; json?: boolean; showValues?: boolean }
     ) => {
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig } = loadConfigAndResolveServer(opts.server);
-        const server = await resolveServer(opts.server, serverConfig);
+        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const env = await listEnv(ssh, service);
@@ -168,19 +169,19 @@ envCommand
   .description("Delete an environment variable from a service")
   .argument("<service>", "Service name")
   .argument("<key>", "Environment variable key to delete")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       key: string,
-      opts: { server: string; json?: boolean }
+      opts: { server?: string; json?: boolean }
     ) => {
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig } = loadConfigAndResolveServer(opts.server);
-        const server = await resolveServer(opts.server, serverConfig);
+        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const current = await listEnv(ssh, service);
@@ -200,7 +201,7 @@ envCommand
         if (!opts.json) spinner.stop(chalk.green(`Deleted "${key}" from "${service}".`));
 
         if (opts.json) {
-          outputJson({ service, server: opts.server, deleted: key });
+          outputJson({ service, server: serverName, deleted: key });
         } else {
           outputSuccess(`Deleted ${key} from ${service}`);
         }
@@ -221,20 +222,20 @@ envCommand
   .description("Import environment variables from a file")
   .argument("<service>", "Service name")
   .argument("<file>", "Path to .env file")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       file: string,
-      opts: { server: string; json?: boolean }
+      opts: { server?: string; json?: boolean }
     ) => {
       let ssh: SSHConnectionOptions | undefined;
 
       try {
         const newEnv = loadEnvFile(file);
-        const { serverConfig } = loadConfigAndResolveServer(opts.server);
-        const server = await resolveServer(opts.server, serverConfig);
+        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const current = await listEnv(ssh, service);
@@ -249,7 +250,7 @@ envCommand
 
         const imported = Object.keys(newEnv);
         if (opts.json) {
-          outputJson({ service, server: opts.server, imported });
+          outputJson({ service, server: serverName, imported });
         } else {
           outputSuccess(`Imported ${imported.join(", ")} to ${service}`);
         }
@@ -269,18 +270,18 @@ envCommand
   .command("export")
   .description("Export environment variables as KEY=VALUE lines")
   .argument("<service>", "Service name")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
-      opts: { server: string; json?: boolean }
+      opts: { server?: string; json?: boolean }
     ) => {
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig } = loadConfigAndResolveServer(opts.server);
-        const server = await resolveServer(opts.server, serverConfig);
+        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const env = await listEnv(ssh, service);

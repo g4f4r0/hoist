@@ -5,7 +5,7 @@ import chalk from "chalk";
 import { createDatabase, listDatabases, deleteDatabase, getDatabaseInfo, controlDatabase } from "../lib/database.js";
 import { listTemplates } from "../lib/templates/index.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
-import { loadProjectConfig } from "../lib/project-config.js";
+import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { outputJson, outputError, outputSuccess } from "../lib/output.js";
 
@@ -238,12 +238,12 @@ dbCommand
   .command("info")
   .description("Show database details")
   .argument("<name>", "Database name")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
     async (
       name: string,
-      opts: { server: string; json?: boolean }
+      opts: { server?: string; json?: boolean }
     ) => {
       let config;
       try {
@@ -253,15 +253,23 @@ dbCommand
         process.exit(1);
       }
 
-      const serverConfig = config.servers[opts.server];
+      let serverName;
+      try {
+        serverName = getDefaultServer(config, opts.server);
+      } catch (err) {
+        outputError(err instanceof Error ? err.message : "Failed to resolve server");
+        process.exit(1);
+      }
+
+      const serverConfig = config.servers[serverName];
       if (!serverConfig) {
-        outputError(`Server "${opts.server}" not found in hoist.json`);
+        outputError(`Server "${serverName}" not found in hoist.json`);
         process.exit(1);
       }
 
       let server;
       try {
-        server = await resolveServer(opts.server, serverConfig);
+        server = await resolveServer(serverName, serverConfig);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to resolve server");
         process.exit(1);
@@ -302,14 +310,14 @@ dbCommand
   .command("destroy")
   .description("Destroy a database")
   .argument("<name>", "Database name")
-  .requiredOption("--server <server>", "Server name")
+  .option("--server <server>", "Server name")
   .option("--yes", "Skip confirmation")
   .option("--json", "Output as JSON")
   .option("--delete-volumes", "Also delete data volumes")
   .action(
     async (
       name: string,
-      opts: { server: string; yes?: boolean; json?: boolean; deleteVolumes?: boolean }
+      opts: { server?: string; yes?: boolean; json?: boolean; deleteVolumes?: boolean }
     ) => {
       if (!opts.yes && !opts.json) {
         const confirmed = await p.confirm({
@@ -326,15 +334,23 @@ dbCommand
         process.exit(1);
       }
 
-      const serverConfig = config.servers[opts.server];
+      let serverName;
+      try {
+        serverName = getDefaultServer(config, opts.server);
+      } catch (err) {
+        outputError(err instanceof Error ? err.message : "Failed to resolve server");
+        process.exit(1);
+      }
+
+      const serverConfig = config.servers[serverName];
       if (!serverConfig) {
-        outputError(`Server "${opts.server}" not found in hoist.json`);
+        outputError(`Server "${serverName}" not found in hoist.json`);
         process.exit(1);
       }
 
       let server;
       try {
-        server = await resolveServer(opts.server, serverConfig);
+        server = await resolveServer(serverName, serverConfig);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to resolve server");
         process.exit(1);
@@ -353,7 +369,7 @@ dbCommand
         await deleteDatabase(ssh, name, opts.deleteVolumes);
         if (!opts.json) spinner.stop(`Database "${name}" destroyed.`);
         if (opts.json) {
-          outputJson({ status: "destroyed", database: name, server: opts.server });
+          outputJson({ status: "destroyed", database: name, server: serverName });
         } else {
           outputSuccess(`Database "${name}" destroyed.`);
         }
@@ -375,12 +391,12 @@ for (const action of ["stop", "start", "restart"] as const) {
     .command(action)
     .description(`${action.charAt(0).toUpperCase() + action.slice(1)} a database`)
     .argument("<name>", "Database name")
-    .requiredOption("--server <server>", "Server name")
+    .option("--server <server>", "Server name")
     .option("--json", "Output as JSON")
     .action(
       async (
         name: string,
-        opts: { server: string; json?: boolean }
+        opts: { server?: string; json?: boolean }
       ) => {
         let config;
         try {
@@ -390,15 +406,23 @@ for (const action of ["stop", "start", "restart"] as const) {
           process.exit(1);
         }
 
-        const serverConfig = config.servers[opts.server];
+        let serverName;
+        try {
+          serverName = getDefaultServer(config, opts.server);
+        } catch (err) {
+          outputError(err instanceof Error ? err.message : "Failed to resolve server");
+          process.exit(1);
+        }
+
+        const serverConfig = config.servers[serverName];
         if (!serverConfig) {
-          outputError(`Server "${opts.server}" not found in hoist.json`);
+          outputError(`Server "${serverName}" not found in hoist.json`);
           process.exit(1);
         }
 
         let server;
         try {
-          server = await resolveServer(opts.server, serverConfig);
+          server = await resolveServer(serverName, serverConfig);
         } catch (err) {
           outputError(err instanceof Error ? err.message : "Failed to resolve server");
           process.exit(1);
@@ -413,7 +437,7 @@ for (const action of ["stop", "start", "restart"] as const) {
         try {
           await controlDatabase(ssh, name, action);
           if (opts.json) {
-            outputJson({ status: action === "stop" ? "stopped" : "running", database: name, server: opts.server });
+            outputJson({ status: action === "stop" ? "stopped" : "running", database: name, server: serverName });
           } else {
             outputSuccess(`Database "${name}" ${action === "restart" ? "restarted" : action === "stop" ? "stopped" : "started"}.`);
           }

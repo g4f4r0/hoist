@@ -230,6 +230,14 @@ export function loadProjectConfig(dir?: string): ProjectConfig {
   return validateProjectConfig(raw);
 }
 
+/** Returns the single server name from config, or throws if ambiguous. */
+export function getDefaultServer(config: ProjectConfig, specified?: string): string {
+  if (specified) return specified;
+  const names = Object.keys(config.servers);
+  if (names.length === 1) return names[0];
+  throw new Error("Multiple servers in config. Use --server to specify one.");
+}
+
 /** Returns the services assigned to a specific server. */
 export function listServicesByServer(config: ProjectConfig, serverName: string): Record<string, ServiceConfig> {
   const result: Record<string, ServiceConfig> = {};
