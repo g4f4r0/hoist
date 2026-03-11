@@ -13,6 +13,8 @@ import {
 import { generateKeys, hasKeys } from "../lib/ssh-keys.js";
 import { testProviderConnection } from "../providers/index.js";
 import { writeAgentConfig } from "../lib/agent-config.js";
+import { detectEnvProviders } from "../lib/env-providers.js";
+import { outputJson, outputError } from "../lib/output.js";
 
 const PROVIDER_TYPES = [
   { value: "hetzner", label: "Hetzner" },
@@ -28,10 +30,16 @@ function formatProviderName(type: string): string {
 
 export const initCommand = new Command("init")
   .description("Set up Hoist on this machine")
-  .action(async () => {
-    p.intro(chalk.bold("Welcome to Hoist."));
+  .option("--json", "Output as JSON (non-interactive, uses env vars for provider keys)")
+  .option("--yes", "Skip confirmations")
+  .action(async (opts: { json?: boolean; yes?: boolean }) => {
+    const nonInteractive = !!(opts.json || opts.yes);
 
-    if (hasConfig()) {
+    if (!nonInteractive) {
+      p.intro(chalk.bold("Welcome to Hoist."));
+    }
+
+    if (hasConfig() && !nonInteractive) {
       const overwrite = await p.confirm({
         message: "Hoist is already configured. Reinitialize?",
         initialValue: false,
@@ -45,8 +53,69 @@ export const initCommand = new Command("init")
     ensureHoistDir();
 
     const config: HoistConfig = getConfig();
-    let firstProvider: string | undefined;
+    let firstProvider: string | undefined =
+      Object.keys(config.providers)[0] ?? undefined;
 
+    // Non-interactive: detect providers from environment variables
+    if (nonInteractive) {
+      const envProviders = detectEnvProviders();
+
+      if (envProviders.length === 0 && Object.keys(config.providers).length === 0) {
+        if (opts.json) {
+          outputError(
+            "No providers found",
+            "Set HOIST_HETZNER_API_KEY, HOIST_VULTR_API_KEY, or HOIST_DIGITALOCEAN_API_KEY environment variables."
+          );
+        } else {
+          outputError(
+            "No providers found. Set HOIST_HETZNER_API_KEY, HOIST_VULTR_API_KEY, or HOIST_DIGITALOCEAN_API_KEY."
+          );
+        }
+        process.exit(1);
+      }
+
+      const results: Array<{ label: string; type: string; status: string; message?: string }> = [];
+
+      for (const { type, apiKey, label } of envProviders) {
+        if (config.providers[label]) {
+          // Update existing provider's key
+          config.providers[label].apiKey = apiKey;
+          results.push({ label, type, status: "updated" });
+          continue;
+        }
+
+        const result = await testProviderConnection(type, apiKey);
+        if (result.ok) {
+          config.providers[label] = { type, apiKey };
+          if (!firstProvider) {
+            firstProvider = label;
+            config.defaults.provider = label;
+          }
+          results.push({ label, type, status: "added" });
+        } else {
+          results.push({ label, type, status: "failed", message: result.message });
+        }
+      }
+
+      if (!hasKeys()) {
+        generateKeys();
+      }
+
+      updateConfig(config);
+      const written = writeAgentConfig();
+
+      if (opts.json) {
+        outputJson({
+          status: "initialized",
+          providers: results,
+          skills: written.length,
+          restart: "Restart your AI agent to pick up the new skills.",
+        });
+      }
+      return;
+    }
+
+    // Interactive mode (human)
     let addMore = true;
     while (addMore) {
       const providerType = await p.select({
