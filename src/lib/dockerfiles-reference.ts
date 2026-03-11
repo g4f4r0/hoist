@@ -39,7 +39,7 @@ Dockerfile
 
 ---
 
-**Tip:** For all Node.js Dockerfiles below, swap \`node:22-slim\` with \`platformatic/node-caged:25-slim\` to cut memory ~50%.
+**Tip:** For all Node.js Dockerfiles below, swap \`node:22-slim\` with \`platformatic/node-caged:22-slim\` to cut memory ~50%. See the node-caged section below for constraints.
 
 ---
 
@@ -412,7 +412,7 @@ Swap \`node:25-slim\` with \`platformatic/node-caged:25-slim\` for ~50% memory r
 - **4GB heap limit per isolate** — each thread (main + workers) gets its own 4GB cage via IsolateGroups. Total memory only limited by system RAM.
 - **NAN addons will segfault** — check with \`npm ls nan\`. If nothing shows, you're safe.
 - **N-API addons work fine** — sharp, bcrypt, canvas, sqlite3, etc.
-- Available tags: \`25\`, \`25-slim\`, \`25-alpine\`, \`latest\`
+- Available tags: \`22\`, \`22-slim\`, \`22-alpine\`, \`25\`, \`25-slim\`, \`25-alpine\`, \`latest\`
 
 **Benchmark results (AWS EKS, Next.js SSR, 400 req/s):**
 - Memory: ~50% reduction

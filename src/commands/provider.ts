@@ -122,8 +122,9 @@ providerCommand
   .command("delete")
   .description("Delete a provider")
   .argument("[label]", "Provider label to delete")
+  .option("--yes", "Skip confirmation")
   .option("--json", "Output as JSON")
-  .action(async (label?: string, opts?: { json?: boolean }) => {
+  .action(async (label?: string, opts?: { json?: boolean; yes?: boolean }) => {
     const config = getConfig();
     const labels = Object.keys(config.providers);
 
@@ -134,6 +135,10 @@ providerCommand
 
     let targetLabel = label;
     if (!targetLabel) {
+      if (opts?.json) {
+        outputError("Provider label is required with --json");
+        process.exit(1);
+      }
       const selected = await p.select({
         message: "Delete which provider?",
         options: labels.map((name) => ({ value: name, label: name })),
@@ -147,10 +152,12 @@ providerCommand
       process.exit(1);
     }
 
-    const confirmed = await p.confirm({
-      message: `Delete provider "${targetLabel}"?`,
-    });
-    if (p.isCancel(confirmed) || !confirmed) return;
+    if (!opts?.yes && !opts?.json) {
+      const confirmed = await p.confirm({
+        message: `Delete provider "${targetLabel}"?`,
+      });
+      if (p.isCancel(confirmed) || !confirmed) return;
+    }
 
     delete config.providers[targetLabel];
     if (config.defaults.provider === targetLabel) {
