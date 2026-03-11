@@ -110,7 +110,8 @@ export const initCommand = new Command("init")
     updateConfig(config);
 
     const written = writeAgentConfig();
-    p.log.success(`Agent config written: ${written.join(", ")}`);
+    p.log.success(`Agent skills installed: ${written.length} files`);
+    p.log.info(chalk.dim("Restart your AI agent to pick up the new skills."));
 
     const providerCount = Object.keys(config.providers).length;
     p.outro(

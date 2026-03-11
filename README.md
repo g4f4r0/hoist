@@ -23,7 +23,9 @@
 
 ---
 
-Most deployment tools give you a dashboard. Hoist gives your AI agent a CLI — so you can go from code to production in one conversation instead of clicking through three different consoles.
+A VPS costs a few bucks a month. The hard part is everything else — SSH, Docker, firewalls, SSL certs, database backups, zero-downtime deploys. That's where your time goes.
+
+You're already building in chat. Why leave to click through a dashboard?
 
 ```
 You:    Deploy this Node.js API with Postgres on a cheap server.
@@ -37,7 +39,7 @@ Agent:  Done. Here's what I set up:
 
 No DevOps hire. No infrastructure rabbit holes. No $50/month platform tax. Just your agent, your cloud account, and servers you own.
 
-Works with Claude Code, Codex, Cursor, Windsurf, Copilot — anything that can run shell commands.
+Works with Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Copilot — anything that can run shell commands.
 
 ```
 npm install -g hoist-cli
@@ -111,8 +113,11 @@ hoist domain add api.myapp.com --service api --json
 | Hetzner Cloud | Supported |
 | Vultr | Supported |
 | DigitalOcean | Supported |
+| Vercel, AWS, GCP, ... | Coming soon |
 
-Add your own or contribute support for a new provider.
+Started with VPS because it's the best value. Cloud platforms are next — same chat-based workflow, more deployment targets. More templates (queues, caches, search) are coming too.
+
+Contributions welcome.
 
 ---
 
@@ -207,16 +212,19 @@ All commands support `--json`. Mutating commands support `--yes` to skip confirm
 
 ## Agent integration
 
-Hoist auto-generates skill files so AI agents understand your infrastructure out of the box:
+Hoist implements the [Agent Skills](https://agentskills.io) open standard. After `hoist init` or `hoist update`, skill files are installed globally and auto-discovered by any compatible agent:
 
 | Agent | Location |
 |-------|----------|
 | Claude Code | `~/.claude/skills/hoist/` |
+| Cursor | `~/.cursor/skills/hoist/` |
+| Gemini CLI | `~/.gemini/skills/hoist/` |
+| OpenCode | `~/.claude/skills/hoist/` or `~/.agents/skills/hoist/` |
 | Codex | `~/.agents/skills/hoist/` |
 
 Each skill includes `SKILL.md` (how to use Hoist), `COMMANDS.md` (full flag reference), and `DOCKERFILES.md` (framework-specific Docker patterns for Next.js, Remix, Astro, Python, Go, Rust, and more).
 
-Run `hoist init` or `hoist update` to generate. Hoist never modifies your CLAUDE.md or AGENTS.md.
+Any agent that supports the Agent Skills standard will pick up Hoist automatically — no manual configuration needed.
 
 ---
 

@@ -46,6 +46,7 @@ export const updateCommand = new Command("update")
 
       if (!result || !result.updateAvailable) {
         outputSuccess("Skills updated. CLI already on the latest version.");
+        p.log.info(chalk.dim("Restart your AI agent to pick up the new skills."));
         return;
       }
 
@@ -57,6 +58,7 @@ export const updateCommand = new Command("update")
         p.log.step("Running npm install -g hoist-cli...");
         execSync("npm install -g hoist-cli@latest", { stdio: "inherit" });
         outputSuccess(`Skills updated. CLI updated to ${result.latest}.`);
+        p.log.info(chalk.dim("Restart your AI agent to pick up the new skills."));
       } catch (err) {
         outputError(
           "CLI update failed",
@@ -69,6 +71,7 @@ export const updateCommand = new Command("update")
       if (!result || !result.updateAvailable) {
         outputJson({
           skills: "updated",
+          restart: "Restart your AI agent to pick up the new skills.",
           cli: { current, latest: result?.latest ?? current, updated: false },
         });
         return;
@@ -78,6 +81,7 @@ export const updateCommand = new Command("update")
         execSync("npm install -g hoist-cli@latest", { stdio: "pipe" });
         outputJson({
           skills: "updated",
+          restart: "Restart your AI agent to pick up the new skills.",
           cli: { current, latest: result.latest, updated: true },
         });
       } catch (err) {

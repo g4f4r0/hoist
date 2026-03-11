@@ -286,54 +286,27 @@ function generateCodexSkill(): string {
   return lines.join("\n");
 }
 
-/** Writes skill files globally to ~/.claude/ and ~/.agents/. */
+/** Writes skill files globally to all Agent Skills standard directories. */
 export function writeAgentConfig(): string[] {
   const home = os.homedir();
   const written: string[] = [];
 
-  // Claude skill: ~/.claude/skills/hoist/
-  const claudeSkillDir = path.join(home, ".claude", "skills", "hoist");
-  fs.mkdirSync(claudeSkillDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(claudeSkillDir, "SKILL.md"),
-    generateClaudeSkill(),
-    "utf-8"
-  );
-  fs.writeFileSync(
-    path.join(claudeSkillDir, "COMMANDS.md"),
-    generateCommandsReference(),
-    "utf-8"
-  );
-  fs.writeFileSync(
-    path.join(claudeSkillDir, "DOCKERFILES.md"),
-    generateDockerfileReference(),
-    "utf-8"
-  );
-  written.push("~/.claude/skills/hoist/SKILL.md");
-  written.push("~/.claude/skills/hoist/COMMANDS.md");
-  written.push("~/.claude/skills/hoist/DOCKERFILES.md");
+  const skillDirs = [
+    { dir: path.join(home, ".claude", "skills", "hoist"), skill: generateClaudeSkill, label: "~/.claude" },
+    { dir: path.join(home, ".cursor", "skills", "hoist"), skill: generateClaudeSkill, label: "~/.cursor" },
+    { dir: path.join(home, ".gemini", "skills", "hoist"), skill: generateCodexSkill, label: "~/.gemini" },
+    { dir: path.join(home, ".agents", "skills", "hoist"), skill: generateCodexSkill, label: "~/.agents" },
+  ];
 
-  // Codex skill: ~/.agents/skills/hoist/
-  const codexSkillDir = path.join(home, ".agents", "skills", "hoist");
-  fs.mkdirSync(codexSkillDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(codexSkillDir, "SKILL.md"),
-    generateCodexSkill(),
-    "utf-8"
-  );
-  fs.writeFileSync(
-    path.join(codexSkillDir, "COMMANDS.md"),
-    generateCommandsReference(),
-    "utf-8"
-  );
-  fs.writeFileSync(
-    path.join(codexSkillDir, "DOCKERFILES.md"),
-    generateDockerfileReference(),
-    "utf-8"
-  );
-  written.push("~/.agents/skills/hoist/SKILL.md");
-  written.push("~/.agents/skills/hoist/COMMANDS.md");
-  written.push("~/.agents/skills/hoist/DOCKERFILES.md");
+  for (const { dir, skill, label } of skillDirs) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "SKILL.md"), skill(), "utf-8");
+    fs.writeFileSync(path.join(dir, "COMMANDS.md"), generateCommandsReference(), "utf-8");
+    fs.writeFileSync(path.join(dir, "DOCKERFILES.md"), generateDockerfileReference(), "utf-8");
+    written.push(`${label}/skills/hoist/SKILL.md`);
+    written.push(`${label}/skills/hoist/COMMANDS.md`);
+    written.push(`${label}/skills/hoist/DOCKERFILES.md`);
+  }
 
   return written;
 }
