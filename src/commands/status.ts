@@ -5,7 +5,7 @@ import { loadProjectConfig, isAppService } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
 import { listRoutes } from "../lib/caddy.js";
 import { exec, closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
-import { outputJson, outputError } from "../lib/output.js";
+import { outputJson, outputError, isJsonMode } from "../lib/output.js";
 
 interface ContainerInfo {
   name: string;
@@ -91,6 +91,7 @@ export const statusCommand = new Command("status")
   .description("Show project status and drift detection")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
+    const json = json || isJsonMode();
     let config;
     try {
       config = loadProjectConfig();
@@ -183,7 +184,7 @@ export const statusCommand = new Command("status")
       drift,
     };
 
-    if (opts.json) {
+    if (json) {
       outputJson(result);
       return;
     }

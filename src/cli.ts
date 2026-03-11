@@ -19,9 +19,16 @@ import { skillCommand } from "./commands/skill.js";
 import { closeAll } from "./lib/ssh.js";
 import { checkForUpdate } from "./lib/version-check.js";
 import { showStatus } from "./lib/status-check.js";
+import { setJsonMode, setAutoYes } from "./lib/output.js";
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
+
+// Non-TTY = agent calling us. Auto-enable JSON output and skip confirmations.
+if (!process.stdout.isTTY) {
+  setJsonMode(true);
+  setAutoYes(true);
+}
 
 const program = new Command();
 

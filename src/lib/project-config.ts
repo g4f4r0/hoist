@@ -257,6 +257,28 @@ export function getDefaultServer(config: ProjectConfig, specified?: string): str
   throw new Error("Multiple servers in config. Use --server to specify one.");
 }
 
+/** Returns the server name for a given service, or uses the specified override. */
+export function getServerForService(
+  config: ProjectConfig,
+  serviceName: string,
+  specified?: string
+): string {
+  if (specified) return specified;
+  const service = config.services[serviceName];
+  if (service) return service.server;
+  throw new Error(`Service "${serviceName}" not found in hoist.json`);
+}
+
+/** Returns the single app service if exactly one exists, or null. */
+export function getOnlyAppService(
+  config: ProjectConfig
+): [string, AppServiceConfig] | null {
+  const appServices = Object.entries(config.services).filter(
+    (entry): entry is [string, AppServiceConfig] => isAppService(entry[1])
+  );
+  return appServices.length === 1 ? appServices[0] : null;
+}
+
 /** Returns the services assigned to a specific server. */
 export function listServicesByServer(config: ProjectConfig, serverName: string): Record<string, ServiceConfig> {
   const result: Record<string, ServiceConfig> = {};

@@ -8,7 +8,7 @@ import {
   type ProviderConfig,
 } from "../lib/config.js";
 import { testProviderConnection } from "../providers/index.js";
-import { outputJson, outputSuccess, outputError } from "../lib/output.js";
+import { outputJson, outputSuccess, outputError, isJsonMode, isAutoYes } from "../lib/output.js";
 
 const PROVIDER_TYPES = [
   { value: "hetzner", label: "Hetzner" },
@@ -74,14 +74,14 @@ providerCommand
       }
       updateConfig(config);
 
-      if (opts.json) {
+      if ((opts.json || isJsonMode())) {
         outputJson({ status: "success", provider: label, type: providerType });
       } else {
         outputSuccess(`Provider "${label}" added.`);
       }
     } else {
       spinner.stop(chalk.red(`Verification failed: ${result.message}`));
-      if (opts.json) {
+      if ((opts.json || isJsonMode())) {
         outputError("Verification failed", result.message);
       }
       process.exit(1);
@@ -102,7 +102,7 @@ providerCommand
       })
     );
 
-    if (opts.json) {
+    if ((opts.json || isJsonMode())) {
       outputJson(providers);
       return;
     }
@@ -135,7 +135,7 @@ providerCommand
 
     let targetLabel = label;
     if (!targetLabel) {
-      if (opts?.json) {
+      if ((opts?.json || isJsonMode())) {
         outputError("Provider label is required with --json");
         process.exit(1);
       }
@@ -152,7 +152,7 @@ providerCommand
       process.exit(1);
     }
 
-    if (!opts?.yes && !opts?.json) {
+    if (!(opts?.yes || isAutoYes()) && !(opts?.json || isJsonMode())) {
       const confirmed = await p.confirm({
         message: `Delete provider "${targetLabel}"?`,
       });
@@ -165,7 +165,7 @@ providerCommand
     }
     updateConfig(config);
 
-    if (opts?.json) {
+    if ((opts?.json || isJsonMode())) {
       outputJson({ status: "deleted", provider: targetLabel });
     } else {
       outputSuccess(`Provider "${targetLabel}" deleted.`);
@@ -219,14 +219,14 @@ providerCommand
       config.providers[targetLabel].apiKey = apiKey;
       updateConfig(config);
 
-      if (opts?.json) {
+      if ((opts?.json || isJsonMode())) {
         outputJson({ status: "updated", provider: targetLabel });
       } else {
         outputSuccess(`Provider "${targetLabel}" API key updated.`);
       }
     } else {
       spinner.stop(chalk.red(`Verification failed: ${result.message}`));
-      if (opts?.json) {
+      if ((opts?.json || isJsonMode())) {
         outputError("Verification failed", result.message);
       }
       process.exit(1);
@@ -255,7 +255,7 @@ providerCommand
         continue;
       }
 
-      if (!opts?.json) {
+      if (!(opts?.json || isJsonMode())) {
         const spinner = p.spinner();
         spinner.start(`Testing ${name}...`);
         const result = await testProviderConnection(provider.type, provider.apiKey);
@@ -270,7 +270,7 @@ providerCommand
       }
     }
 
-    if (opts?.json) {
+    if ((opts?.json || isJsonMode())) {
       outputJson(results);
     }
   });
@@ -307,7 +307,7 @@ providerCommand
     config.defaults.provider = targetLabel;
     updateConfig(config);
 
-    if (opts?.json) {
+    if ((opts?.json || isJsonMode())) {
       outputJson({ status: "success", default: targetLabel });
     } else {
       outputSuccess(`Default provider set to "${targetLabel}".`);

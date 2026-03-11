@@ -16,7 +16,7 @@ import { testProviderConnection } from "../providers/index.js";
 import { loadProjectConfig } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
 import { exec, closeConnection } from "../lib/ssh.js";
-import { outputJson } from "../lib/output.js";
+import { outputJson, isJsonMode } from "../lib/output.js";
 
 type CheckResult = {
   name: string;
@@ -184,13 +184,14 @@ export const doctorCommand = new Command("doctor")
   .description("Run health checks on local setup, providers, and project")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
+    const json = json || isJsonMode();
     const allChecks: CheckResult[] = [];
 
-    if (!opts.json) {
+    if (!json) {
       p.intro(chalk.bold("Hoist Doctor"));
     }
 
-    if (!opts.json) {
+    if (!json) {
       const s = p.spinner();
       s.start("Checking local setup");
       const local = await checkLocalSetup();
@@ -201,7 +202,7 @@ export const doctorCommand = new Command("doctor")
       allChecks.push(...await checkLocalSetup());
     }
 
-    if (!opts.json) {
+    if (!json) {
       const s = p.spinner();
       s.start("Checking providers");
       const providers = await checkProviders();
@@ -212,7 +213,7 @@ export const doctorCommand = new Command("doctor")
       allChecks.push(...await checkProviders());
     }
 
-    if (!opts.json) {
+    if (!json) {
       const s = p.spinner();
       s.start("Checking project config");
       const project = await checkProjectConfig();
@@ -223,7 +224,7 @@ export const doctorCommand = new Command("doctor")
       allChecks.push(...await checkProjectConfig());
     }
 
-    if (opts.json) {
+    if (json) {
       outputJson({
         status: allChecks.every((c) => c.status !== "fail") ? "healthy" : "unhealthy",
         checks: allChecks,

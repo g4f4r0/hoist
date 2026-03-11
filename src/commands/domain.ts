@@ -1,11 +1,11 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
-import { loadProjectConfig, isAppService } from "../lib/project-config.js";
+import { loadProjectConfig, isAppService, getOnlyAppService } from "../lib/project-config.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
 import { addRoute, deleteRoute, listRoutes } from "../lib/caddy.js";
 import { closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
 
 export const domainCommand = new Command("domain").description(
   "Manage domains and routing"
@@ -15,13 +15,15 @@ domainCommand
   .command("add")
   .description("Add a domain route for a service")
   .argument("<domain>", "Domain name")
-  .requiredOption("--service <name>", "Service name")
+  .option("--service <name>", "Service name (auto-detected if only one app service)")
   .option("--json", "Output as JSON")
   .action(
     async (
       domain: string,
-      opts: { service: string; json?: boolean }
+      opts: { service?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
+
       let config;
       try {
         config = loadProjectConfig();
@@ -30,14 +32,26 @@ domainCommand
         process.exit(1);
       }
 
-      const service = config.services[opts.service];
+      // Auto-detect service if not specified
+      let serviceName = opts.service;
+      if (!serviceName) {
+        const only = getOnlyAppService(config);
+        if (only) {
+          serviceName = only[0];
+        } else {
+          outputError("Multiple app services found. Use --service to specify one.");
+          process.exit(1);
+        }
+      }
+
+      const service = config.services[serviceName];
       if (!service) {
-        outputError(`Service "${opts.service}" not found in hoist.json`);
+        outputError(`Service "${serviceName}" not found in hoist.json`);
         process.exit(1);
       }
 
       if (!isAppService(service)) {
-        outputError(`Service "${opts.service}" is not an app service`);
+        outputError(`Service "${serviceName}" is not an app service`);
         process.exit(1);
       }
 
@@ -52,7 +66,7 @@ domainCommand
       const ssh = { host: server.ip, port: 22, username: "root" };
 
       try {
-        await addRoute(ssh, domain, `hoist-${opts.service}:${service.port}`);
+        await addRoute(ssh, domain, `hoist-${serviceName}:${service.port}`);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to add route");
         closeConnection(ssh);
@@ -63,16 +77,16 @@ domainCommand
 
       const result = {
         domain,
-        service: opts.service,
+        service: serviceName,
         serverIp: server.ip,
         note: `Point DNS A record to ${server.ip}`,
       };
 
-      if (opts.json) {
+      if (json) {
         outputJson(result);
       } else {
         outputSuccess(
-          `Route added: ${chalk.bold(domain)} → ${chalk.bold(opts.service)}`
+          `Route added: ${chalk.bold(domain)} → ${chalk.bold(serviceName)}`
         );
         p.log.info(chalk.dim(`Point DNS A record to ${server.ip}`));
       }
@@ -84,6 +98,8 @@ domainCommand
   .description("List all domain routes")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
+    const json = opts.json || isJsonMode();
+
     let config;
     try {
       config = loadProjectConfig();
@@ -114,7 +130,7 @@ domainCommand
           allRoutes.push({ ...route, server: serverName });
         }
       } catch (err) {
-        if (!opts.json) {
+        if (!json) {
           p.log.warning(
             `Failed to list routes on ${serverName}: ${err instanceof Error ? err.message : err}`
           );
@@ -123,7 +139,7 @@ domainCommand
       closeConnection(ssh);
     }
 
-    if (opts.json) {
+    if (json) {
       outputJson(allRoutes);
       return;
     }
@@ -151,6 +167,9 @@ domainCommand
       domain: string,
       opts: { json?: boolean; yes?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
+      const yes = opts.yes || isAutoYes();
+
       let config;
       try {
         config = loadProjectConfig();
@@ -191,7 +210,7 @@ domainCommand
         process.exit(1);
       }
 
-      if (!opts.yes && !opts.json) {
+      if (!yes && !json) {
         const confirmed = await p.confirm({
           message: `Delete route for "${domain}" from ${targetServer}?`,
         });
@@ -209,7 +228,7 @@ domainCommand
 
       closeConnection(ssh);
 
-      if (opts.json) {
+      if (json) {
         outputJson({ status: "deleted", domain, server: targetServer });
       } else {
         outputSuccess(`Route for "${domain}" deleted from ${targetServer}`);

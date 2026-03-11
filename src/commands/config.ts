@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 import { loadProjectConfig } from "../lib/project-config.js";
-import { outputJson, outputSuccess, outputError, setJsonMode } from "../lib/output.js";
+import { outputJson, outputSuccess, outputError, setJsonMode, isJsonMode } from "../lib/output.js";
 
 export const configCommand = new Command("config")
   .description("Manage project configuration");
@@ -11,7 +11,8 @@ configCommand
   .description("Validate hoist.json in the current directory")
   .option("--json", "Output as JSON")
   .action((opts: { json?: boolean }) => {
-    if (opts.json) {
+    const json = opts.json || isJsonMode();
+    if (json) {
       setJsonMode(true);
     }
 
@@ -23,7 +24,7 @@ configCommand
 
       outputSuccess(
         `hoist.json is valid — project "${config.project}" with ${serverCount} server(s) and ${serviceCount} service(s)`,
-        opts.json
+        json
           ? {
               project: config.project,
               servers: serverCount,

@@ -5,15 +5,15 @@ import chalk from "chalk";
 import { listEnv, recreateWithEnv, parseEnvArgs } from "../lib/container-env.js";
 import { loadEnvFile } from "../lib/deploy.js";
 import { resolveServer } from "../lib/server-resolve.js";
-import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
+import { loadProjectConfig, getServerForService } from "../lib/project-config.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode } from "../lib/output.js";
 
 export const envCommand = new Command("env").description("Manage service environment variables");
 
-function loadConfigAndResolveServer(specified?: string) {
+function loadConfigAndResolve(serviceName: string, specified?: string) {
   const config = loadProjectConfig();
-  const serverName = getDefaultServer(config, specified);
+  const serverName = getServerForService(config, serviceName, specified);
   const serverConfig = config.servers[serverName];
   if (!serverConfig) {
     throw new Error(`Server "${serverName}" not found in hoist.json`);
@@ -34,10 +34,11 @@ envCommand
       vars: string[],
       opts: { server?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const { serverConfig, serverName } = loadConfigAndResolve(service, opts.server);
         const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
@@ -46,14 +47,14 @@ envCommand
         const merged = { ...current, ...newEnv };
 
         const spinner = p.spinner();
-        if (!opts.json) spinner.start(`Updating environment for "${service}"...`);
+        if (!json) spinner.start(`Updating environment for "${service}"...`);
 
         await recreateWithEnv(ssh, service, merged);
 
-        if (!opts.json) spinner.stop(chalk.green(`Environment updated for "${service}".`));
+        if (!json) spinner.stop(chalk.green(`Environment updated for "${service}".`));
 
         const updated = Object.keys(newEnv);
-        if (opts.json) {
+        if (json) {
           outputJson({ service, server: serverName, updated });
         } else {
           outputSuccess(`Set ${updated.join(", ")} on ${service}`);
@@ -83,10 +84,11 @@ envCommand
       key: string,
       opts: { server?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const { serverConfig, serverName } = loadConfigAndResolve(service, opts.server);
         const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
@@ -98,7 +100,7 @@ envCommand
           process.exit(3);
         }
 
-        if (opts.json) {
+        if (json) {
           outputJson({ service, key, value });
         } else {
           p.log.info(`${chalk.bold(key)}=${value}`);
@@ -127,29 +129,26 @@ envCommand
       service: string,
       opts: { server?: string; json?: boolean; showValues?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const { serverConfig, serverName } = loadConfigAndResolve(service, opts.server);
         const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const env = await listEnv(ssh, service);
 
-        const display: Record<string, string> = {};
-        for (const [key, value] of Object.entries(env)) {
-          display[key] = opts.showValues ? value : "****";
-        }
-
-        if (opts.json) {
-          outputJson({ service, env: display });
+        if (json) {
+          // JSON mode: always return real values (agents need them)
+          outputJson({ service, env });
         } else {
-          if (Object.keys(display).length === 0) {
+          if (Object.keys(env).length === 0) {
             p.log.info(`No environment variables set for "${service}".`);
             return;
           }
-          for (const [key, value] of Object.entries(display)) {
-            p.log.info(`${chalk.bold(key)}=${value}`);
+          for (const [key, value] of Object.entries(env)) {
+            p.log.info(`${chalk.bold(key)}=${opts.showValues ? value : "****"}`);
           }
         }
       } catch (err) {
@@ -177,10 +176,11 @@ envCommand
       key: string,
       opts: { server?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const { serverConfig, serverName } = loadConfigAndResolve(service, opts.server);
         const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
@@ -194,13 +194,13 @@ envCommand
         delete current[key];
 
         const spinner = p.spinner();
-        if (!opts.json) spinner.start(`Deleting "${key}" from "${service}"...`);
+        if (!json) spinner.start(`Deleting "${key}" from "${service}"...`);
 
         await recreateWithEnv(ssh, service, current);
 
-        if (!opts.json) spinner.stop(chalk.green(`Deleted "${key}" from "${service}".`));
+        if (!json) spinner.stop(chalk.green(`Deleted "${key}" from "${service}".`));
 
-        if (opts.json) {
+        if (json) {
           outputJson({ service, server: serverName, deleted: key });
         } else {
           outputSuccess(`Deleted ${key} from ${service}`);
@@ -230,11 +230,12 @@ envCommand
       file: string,
       opts: { server?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
         const newEnv = loadEnvFile(file);
-        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const { serverConfig, serverName } = loadConfigAndResolve(service, opts.server);
         const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
@@ -242,14 +243,14 @@ envCommand
         const merged = { ...current, ...newEnv };
 
         const spinner = p.spinner();
-        if (!opts.json) spinner.start(`Importing environment for "${service}"...`);
+        if (!json) spinner.start(`Importing environment for "${service}"...`);
 
         await recreateWithEnv(ssh, service, merged);
 
-        if (!opts.json) spinner.stop(chalk.green(`Environment imported for "${service}".`));
+        if (!json) spinner.stop(chalk.green(`Environment imported for "${service}".`));
 
         const imported = Object.keys(newEnv);
-        if (opts.json) {
+        if (json) {
           outputJson({ service, server: serverName, imported });
         } else {
           outputSuccess(`Imported ${imported.join(", ")} to ${service}`);
@@ -277,16 +278,17 @@ envCommand
       service: string,
       opts: { server?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
-        const { serverConfig, serverName } = loadConfigAndResolveServer(opts.server);
+        const { serverConfig, serverName } = loadConfigAndResolve(service, opts.server);
         const server = await resolveServer(serverName, serverConfig);
         ssh = { host: server.ip, port: 22, username: "root" };
 
         const env = await listEnv(ssh, service);
 
-        if (opts.json) {
+        if (json) {
           outputJson({ service, env });
         } else {
           for (const [key, value] of Object.entries(env)) {

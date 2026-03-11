@@ -2,13 +2,13 @@ import { Command } from "commander";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 
-import { loadProjectConfig, isAppService, type AppServiceConfig } from "../lib/project-config.js";
+import { loadProjectConfig, isAppService, getOnlyAppService, type AppServiceConfig } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
 import { exec, execOrFail, closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { containerName, imageName, buildDockerRunCmd, checkContainerHealth } from "../lib/container.js";
 import { listEnv } from "../lib/container-env.js";
 import { updateRouteUpstream } from "../lib/caddy.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
 
 interface RollbackResult {
   service: string;
@@ -96,6 +96,9 @@ export const rollbackCommand = new Command("rollback")
   .option("--json", "Output as JSON")
   .option("--yes", "Skip confirmations")
   .action(async (opts: { service?: string; server?: string; json?: boolean; yes?: boolean }) => {
+    const json = opts.json || isJsonMode();
+    const yes = opts.yes || isAutoYes();
+
     let config;
     try {
       config = loadProjectConfig();
@@ -126,12 +129,12 @@ export const rollbackCommand = new Command("rollback")
         process.exit(1);
       }
       target = match;
-    } else if (opts.json) {
-      if (appServices.length > 1) {
-        outputError("Multiple app services found. Use --service to specify one.");
-        process.exit(1);
-      }
+    } else if (appServices.length === 1) {
+      // Single app service — auto-select
       target = appServices[0];
+    } else if (json || yes) {
+      outputError("Multiple app services found. Use --service to specify one.");
+      process.exit(1);
     } else {
       const selected = await p.select({
         message: "Select a service to roll back:",
@@ -161,7 +164,7 @@ export const rollbackCommand = new Command("rollback")
       username: "root",
     };
 
-    if (!opts.yes && !opts.json) {
+    if (!yes && !json) {
       const confirmed = await p.confirm({
         message: `Roll back ${chalk.bold(serviceName)} on ${service.server} (${server.ip}) to its previous image?`,
       });
@@ -169,16 +172,16 @@ export const rollbackCommand = new Command("rollback")
     }
 
     const spinner = p.spinner();
-    if (!opts.json) spinner.start(`Rolling back ${chalk.bold(serviceName)}...`);
+    if (!json) spinner.start(`Rolling back ${chalk.bold(serviceName)}...`);
 
     try {
       await rollbackService(ssh, serviceName, service, (msg) => {
-        if (!opts.json) spinner.message(msg);
+        if (!json) spinner.message(msg);
       });
 
       const url = service.domain ? `https://${service.domain}` : `http://${ssh.host}:${service.port}`;
 
-      if (!opts.json) {
+      if (!json) {
         spinner.stop(chalk.green(`${serviceName} rolled back successfully`));
       }
 
@@ -190,14 +193,14 @@ export const rollbackCommand = new Command("rollback")
         url,
       };
 
-      if (opts.json) {
+      if (json) {
         outputJson(result);
       } else {
         outputSuccess(`${serviceName} rolled back to previous image`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Rollback failed";
-      if (!opts.json) spinner.stop(chalk.red(`${serviceName} failed: ${message}`));
+      if (!json) spinner.stop(chalk.red(`${serviceName} failed: ${message}`));
 
       const result: RollbackResult = {
         service: serviceName,
@@ -208,7 +211,7 @@ export const rollbackCommand = new Command("rollback")
         error: message,
       };
 
-      if (opts.json) {
+      if (json) {
         outputJson(result);
       } else {
         outputError(message);

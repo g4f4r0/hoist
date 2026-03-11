@@ -10,7 +10,7 @@ import { listTemplates, getTemplate } from "../lib/templates/index.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
 import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
 import { closeConnection, execOrFail, type SSHConnectionOptions } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
 
 export const templateCommand = new Command("template").description(
   "Manage templates and template-based services"
@@ -21,9 +21,10 @@ templateCommand
   .description("List all available templates")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
+    const json = opts.json || isJsonMode();
     const templates = listTemplates();
 
-    if (opts.json) {
+    if (json) {
       outputJson(templates);
       return;
     }
@@ -44,6 +45,7 @@ templateCommand
   .argument("<name>", "Template name")
   .option("--json", "Output as JSON")
   .action(async (name: string, opts: { json?: boolean }) => {
+    const json = opts.json || isJsonMode();
     let template;
     try {
       template = getTemplate(name);
@@ -52,7 +54,7 @@ templateCommand
       process.exit(3);
     }
 
-    if (opts.json) {
+    if (json) {
       outputJson(template);
       return;
     }
@@ -77,10 +79,10 @@ templateCommand
 templateCommand
   .command("create")
   .description("Create a service from a template")
-  .option("--name <name>", "Service name")
+  .option("--name <name>", "Service name (defaults to template type)")
   .option("--type <type>", "Template type")
   .option("--version <version>", "Version override")
-  .option("--server <server>", "Target server name")
+  .option("--server <server>", "Target server name (auto-detected if only one)")
   .option("--json", "Output as JSON")
   .option("--yes", "Skip confirmations")
   .action(
@@ -92,12 +94,13 @@ templateCommand
       json?: boolean;
       yes?: boolean;
     }) => {
+      const json = opts.json || isJsonMode();
       const templates = listTemplates();
 
       let templateType = opts.type;
       if (!templateType) {
-        if (opts.json) {
-          outputError("--type is required with --json");
+        if (json) {
+          outputError("--type is required");
           process.exit(1);
         }
         const selected = await p.select({
@@ -111,10 +114,11 @@ templateCommand
         templateType = selected;
       }
 
-      let serviceName = opts.name;
+      // Default name to template type
+      let serviceName = opts.name ?? templateType;
       if (!serviceName) {
-        if (opts.json) {
-          outputError("--name is required with --json");
+        if (json) {
+          outputError("--name or --type is required");
           process.exit(1);
         }
         const input = await p.text({
@@ -126,7 +130,6 @@ templateCommand
         serviceName = input;
       }
 
-      let serverName = opts.server;
       let config;
       try {
         config = loadProjectConfig();
@@ -135,25 +138,28 @@ templateCommand
         process.exit(1);
       }
 
+      // Auto-detect server if only one exists
+      let serverName = opts.server;
       if (!serverName) {
-        if (opts.json) {
-          outputError("--server is required with --json");
-          process.exit(1);
+        try {
+          serverName = getDefaultServer(config);
+        } catch {
+          // Multiple servers — need user input
+          if (json) {
+            outputError("Multiple servers. Use --server to specify one.");
+            process.exit(1);
+          }
+          const serverNames = Object.keys(config.servers);
+          const selected = await p.select({
+            message: "Server:",
+            options: serverNames.map((name) => ({
+              value: name,
+              label: `${name} (${config.servers[name].provider})`,
+            })),
+          });
+          if (p.isCancel(selected)) return;
+          serverName = selected;
         }
-        const serverNames = Object.keys(config.servers);
-        if (serverNames.length === 0) {
-          outputError("No servers defined in hoist.json");
-          process.exit(1);
-        }
-        const selected = await p.select({
-          message: "Server:",
-          options: serverNames.map((name) => ({
-            value: name,
-            label: `${name} (${config.servers[name].provider})`,
-          })),
-        });
-        if (p.isCancel(selected)) return;
-        serverName = selected;
       }
 
       const serverConfig = config.servers[serverName];
@@ -177,7 +183,7 @@ templateCommand
       };
 
       const spinner = p.spinner();
-      if (!opts.json) spinner.start(`Creating ${templateType} service "${serviceName}"...`);
+      if (!json) spinner.start(`Creating ${templateType} service "${serviceName}"...`);
 
       try {
         const result = await createDatabase({
@@ -186,11 +192,11 @@ templateCommand
           templateName: templateType,
           version: opts.version,
           onLog: (msg) => {
-            if (!opts.json) spinner.message(msg);
+            if (!json) spinner.message(msg);
           },
         });
 
-        if (!opts.json) spinner.stop(chalk.green(`Service "${serviceName}" created.`));
+        if (!json) spinner.stop(chalk.green(`Service "${serviceName}" created.`));
 
         const output = {
           service: result.service,
@@ -201,7 +207,7 @@ templateCommand
           server: serverName,
         };
 
-        if (opts.json) {
+        if (json) {
           outputJson(output);
         } else {
           if (result.connectionString) {
@@ -210,7 +216,7 @@ templateCommand
           outputSuccess(`Service "${serviceName}" is ready on ${serverName}`);
         }
       } catch (err) {
-        if (!opts.json) spinner.stop(chalk.red("Failed."));
+        if (!json) spinner.stop(chalk.red("Failed."));
         outputError(
           "Service creation failed",
           err instanceof Error ? err.message : err
@@ -228,6 +234,8 @@ templateCommand
   .option("--server <server>", "Filter by server name")
   .option("--json", "Output as JSON")
   .action(async (opts: { server?: string; json?: boolean }) => {
+    const json = opts.json || isJsonMode();
+
     let config;
     try {
       config = loadProjectConfig();
@@ -268,7 +276,7 @@ templateCommand
           allServices.push({ server: name, ...svc });
         }
       } catch (err) {
-        if (!opts.json) {
+        if (!json) {
           p.log.warning(
             `Failed to list services on ${name}: ${err instanceof Error ? err.message : err}`
           );
@@ -278,7 +286,7 @@ templateCommand
       }
     }
 
-    if (opts.json) {
+    if (json) {
       outputJson(allServices);
       return;
     }
@@ -310,6 +318,8 @@ templateCommand
       name: string,
       opts: { server?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
+
       let config;
       try {
         config = loadProjectConfig();
@@ -349,7 +359,7 @@ templateCommand
       try {
         const info = await getDatabaseInfo(ssh, name);
 
-        if (opts.json) {
+        if (json) {
           outputJson(info);
           return;
         }
@@ -384,7 +394,10 @@ templateCommand
       name: string,
       opts: { server?: string; yes?: boolean; json?: boolean; deleteVolumes?: boolean }
     ) => {
-      if (!opts.yes && !opts.json) {
+      const json = opts.json || isJsonMode();
+      const yes = opts.yes || isAutoYes();
+
+      if (!yes && !json) {
         const confirmed = await p.confirm({
           message: `Destroy service "${name}"? This cannot be undone.`,
         });
@@ -428,18 +441,18 @@ templateCommand
       };
 
       const spinner = p.spinner();
-      if (!opts.json) spinner.start(`Destroying service "${name}"...`);
+      if (!json) spinner.start(`Destroying service "${name}"...`);
 
       try {
         await deleteDatabase(ssh, name, opts.deleteVolumes);
-        if (!opts.json) spinner.stop(`Service "${name}" destroyed.`);
-        if (opts.json) {
+        if (!json) spinner.stop(`Service "${name}" destroyed.`);
+        if (json) {
           outputJson({ status: "destroyed", service: name, server: serverName });
         } else {
           outputSuccess(`Service "${name}" destroyed.`);
         }
       } catch (err) {
-        if (!opts.json) spinner.stop(chalk.red("Failed."));
+        if (!json) spinner.stop(chalk.red("Failed."));
         outputError(
           `Failed to destroy "${name}"`,
           err instanceof Error ? err.message : err
@@ -463,6 +476,8 @@ templateCommand
       name: string,
       opts: { server?: string; output?: string; json?: boolean }
     ) => {
+      const json = opts.json || isJsonMode();
+
       let config;
       try {
         config = loadProjectConfig();
@@ -500,11 +515,10 @@ templateCommand
       };
 
       const spinner = p.spinner();
-      if (!opts.json) spinner.start(`Backing up service "${name}"...`);
+      if (!json) spinner.start(`Backing up service "${name}"...`);
 
       try {
-        // Detect the database type from container labels
-        if (!opts.json) spinner.message("Detecting database type...");
+        if (!json) spinner.message("Detecting database type...");
         const { stdout: typeOutput } = await execOrFail(
           ssh,
           `docker inspect --format '{{index .Config.Labels "hoist.type"}}' hoist-${name}`
@@ -515,7 +529,6 @@ templateCommand
           throw new Error(`Could not detect database type for service "${name}"`);
         }
 
-        // Determine the dump command and default file extension
         let dumpCommand: string;
         let fileExt: string;
 
@@ -541,23 +554,20 @@ templateCommand
             throw new Error(`Unsupported database type "${dbType}" for backup`);
         }
 
-        // Determine output file path
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, -5);
         const outputPath = opts.output
           ? path.resolve(opts.output)
           : path.resolve(`./${name}-${timestamp}${fileExt}`);
 
-        // Run the dump command over SSH and capture output
-        if (!opts.json) spinner.message(`Running ${dbType} dump...`);
+        if (!json) spinner.message(`Running ${dbType} dump...`);
         const { stdout } = await execOrFail(ssh, dumpCommand);
 
-        // Write the dump to the local file
         fs.writeFileSync(outputPath, stdout, dbType === "mongodb" || dbType === "redis" ? "binary" : "utf-8");
 
         const stats = fs.statSync(outputPath);
         const sizeKb = (stats.size / 1024).toFixed(1);
 
-        if (!opts.json) spinner.stop(chalk.green(`Backup complete.`));
+        if (!json) spinner.stop(chalk.green(`Backup complete.`));
 
         const output = {
           service: name,
@@ -567,7 +577,7 @@ templateCommand
           size: stats.size,
         };
 
-        if (opts.json) {
+        if (json) {
           outputJson(output);
         } else {
           p.log.info(`${chalk.bold("File:")} ${outputPath}`);
@@ -575,7 +585,7 @@ templateCommand
           outputSuccess(`Service "${name}" backed up successfully.`);
         }
       } catch (err) {
-        if (!opts.json) spinner.stop(chalk.red("Failed."));
+        if (!json) spinner.stop(chalk.red("Failed."));
         outputError(
           `Failed to back up "${name}"`,
           err instanceof Error ? err.message : err
@@ -599,6 +609,8 @@ for (const action of ["stop", "start", "restart"] as const) {
         name: string,
         opts: { server?: string; json?: boolean }
       ) => {
+        const json = opts.json || isJsonMode();
+
         let config;
         try {
           config = loadProjectConfig();
@@ -637,7 +649,7 @@ for (const action of ["stop", "start", "restart"] as const) {
 
         try {
           await controlDatabase(ssh, name, action);
-          if (opts.json) {
+          if (json) {
             outputJson({ status: action === "stop" ? "stopped" : "running", service: name, server: serverName });
           } else {
             outputSuccess(`Service "${name}" ${action === "restart" ? "restarted" : action === "stop" ? "stopped" : "started"}.`);

@@ -8,19 +8,20 @@ import chalk from "chalk";
 
 import { checkForUpdate } from "../lib/version-check.js";
 import { writeAgentConfig } from "../lib/agent-config.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode } from "../lib/output.js";
 
 export const updateCommand = new Command("update")
   .description("Update agent skill files and check for CLI updates")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
+    const json = json || isJsonMode();
     const current = __VERSION__;
 
     // 1. Update skill files
     try {
       const written = writeAgentConfig();
 
-      if (!opts.json) {
+      if (!json) {
         for (const file of written) {
           p.log.success(`${chalk.bold(file)} synced`);
         }
@@ -34,7 +35,7 @@ export const updateCommand = new Command("update")
     }
 
     // 2. Check for CLI updates
-    if (!opts.json) {
+    if (!json) {
       const spinner = p.spinner();
       spinner.start("Checking for CLI updates...");
       const result = await checkForUpdate(current);

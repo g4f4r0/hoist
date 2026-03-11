@@ -6,7 +6,7 @@ import { loadProjectConfig, isAppService, type AppServiceConfig } from "../lib/p
 import { resolveServers } from "../lib/server-resolve.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { deployService } from "../lib/deploy.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
 
 interface DeployResult {
   service: string;
@@ -25,6 +25,9 @@ export const deployCommand = new Command("deploy")
   .option("--json", "Output as JSON")
   .option("--yes", "Skip confirmations")
   .action(async (opts: { service?: string; repo?: string; branch: string; json?: boolean; yes?: boolean }) => {
+    const json = opts.json || isJsonMode();
+    const yes = opts.yes || isAutoYes();
+
     let config;
     try {
       config = loadProjectConfig();
@@ -51,7 +54,11 @@ export const deployCommand = new Command("deploy")
         process.exit(1);
       }
       servicesToDeploy = [match];
-    } else if (opts.json) {
+    } else if (appServices.length === 1) {
+      // Single app service — auto-select
+      servicesToDeploy = appServices;
+    } else if (json || yes) {
+      // Multiple services, non-interactive — deploy all
       servicesToDeploy = appServices;
     } else {
       const selected = await p.select({
@@ -74,7 +81,7 @@ export const deployCommand = new Command("deploy")
       process.exit(1);
     }
 
-    if (!opts.yes && !opts.json) {
+    if (!yes && !json) {
       const lines = servicesToDeploy.map(([name, svc]) => {
         const server = resolved[svc.server];
         return `  ${chalk.bold(name)} → ${svc.server} (${server.ip})${svc.domain ? ` — ${svc.domain}` : ""}`;
@@ -96,7 +103,7 @@ export const deployCommand = new Command("deploy")
       };
 
       const spinner = p.spinner();
-      if (!opts.json) spinner.start(`Deploying ${chalk.bold(name)}...`);
+      if (!json) spinner.start(`Deploying ${chalk.bold(name)}...`);
 
       try {
         const result = await deployService({
@@ -107,14 +114,14 @@ export const deployCommand = new Command("deploy")
           repo: opts.repo,
           branch: opts.branch,
           onLog: (msg) => {
-            if (!opts.json) spinner.message(msg);
+            if (!json) spinner.message(msg);
           },
         });
-        if (!opts.json) spinner.stop(chalk.green(`${name} deployed — ${result.status}`));
+        if (!json) spinner.stop(chalk.green(`${name} deployed — ${result.status}`));
         results.push(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Deploy failed";
-        if (!opts.json) spinner.stop(chalk.red(`${name} failed: ${message}`));
+        if (!json) spinner.stop(chalk.red(`${name} failed: ${message}`));
         results.push({
           service: name,
           server: service.server,
@@ -130,7 +137,7 @@ export const deployCommand = new Command("deploy")
 
     const failed = results.filter((r) => r.status === "failed");
 
-    if (opts.json) {
+    if (json) {
       outputJson(results);
       if (failed.length > 0) process.exit(1);
       return;

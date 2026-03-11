@@ -1,9 +1,9 @@
 import { Command } from "commander";
 
 import { resolveServer } from "../lib/server-resolve.js";
-import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
+import { loadProjectConfig, getServerForService } from "../lib/project-config.js";
 import { exec, closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
-import { outputJson, outputError } from "../lib/output.js";
+import { outputJson, outputError, isJsonMode } from "../lib/output.js";
 
 export const logsCommand = new Command("logs")
   .description("View container logs")
@@ -17,7 +17,9 @@ export const logsCommand = new Command("logs")
       service: string,
       opts: { server?: string; lines: string; follow?: boolean; json?: boolean }
     ) => {
-      if (opts.follow && opts.json) {
+      const json = opts.json || isJsonMode();
+
+      if (opts.follow && json) {
         outputError("--json is incompatible with --follow");
         process.exit(1);
       }
@@ -32,7 +34,7 @@ export const logsCommand = new Command("logs")
 
       let serverName;
       try {
-        serverName = getDefaultServer(config, opts.server);
+        serverName = getServerForService(config, service, opts.server);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to resolve server");
         process.exit(1);
@@ -83,7 +85,7 @@ export const logsCommand = new Command("logs")
         } else {
           const result = await exec(ssh, cmd);
 
-          if (opts.json) {
+          if (json) {
             outputJson({
               service,
               server: serverName,

@@ -12,7 +12,7 @@ import {
   generateCommandsReference,
   generateDockerfileReference,
 } from "../lib/agent-config.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode } from "../lib/output.js";
 
 function buildSkillMd(name: string, description: string, version: string): string {
   const frontmatter = [
@@ -89,7 +89,7 @@ skillCommand
           });
         }
 
-        if (opts.json) {
+        if ((opts.json || isJsonMode())) {
           outputJson({
             exported: outputPath,
             name: opts.name,

@@ -87,7 +87,7 @@ describe("writeAgentConfig", () => {
       path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"),
       "utf-8"
     );
-    expect(content).toContain("NEVER run these without");
+    expect(content).toContain("Sensitive Operations");
     expect(content).toContain("hoist init");
     expect(content).toContain("hoist provider add");
   });

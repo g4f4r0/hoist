@@ -14,7 +14,7 @@ import { generateKeys, hasKeys } from "../lib/ssh-keys.js";
 import { testProviderConnection } from "../providers/index.js";
 import { writeAgentConfig } from "../lib/agent-config.js";
 import { detectEnvProviders } from "../lib/env-providers.js";
-import { outputJson, outputError } from "../lib/output.js";
+import { outputJson, outputError, isJsonMode } from "../lib/output.js";
 
 const PROVIDER_TYPES = [
   { value: "hetzner", label: "Hetzner" },
@@ -30,55 +30,20 @@ function formatProviderName(type: string): string {
 
 export const initCommand = new Command("init")
   .description("Set up Hoist on this machine")
-  .option("--json", "Output as JSON (non-interactive, uses env vars for provider keys)")
-  .option("--yes", "Skip confirmations")
-  .action(async (opts: { json?: boolean; yes?: boolean }) => {
-    const nonInteractive = !!(opts.json || opts.yes);
-
-    if (!nonInteractive) {
-      p.intro(chalk.bold("Welcome to Hoist."));
-    }
-
-    if (hasConfig() && !nonInteractive) {
-      const overwrite = await p.confirm({
-        message: "Hoist is already configured. Reinitialize?",
-        initialValue: false,
-      });
-      if (p.isCancel(overwrite) || !overwrite) {
-        p.outro("Keeping existing configuration.");
-        return;
-      }
-    }
-
+  .option("--json", "Output as JSON")
+  .action(async (opts: { json?: boolean }) => {
+    const json = opts.json || isJsonMode();
     ensureHoistDir();
 
-    const config: HoistConfig = getConfig();
-    let firstProvider: string | undefined =
-      Object.keys(config.providers)[0] ?? undefined;
+    // Auto-detect: if env vars are set, configure providers automatically
+    const envProviders = detectEnvProviders();
 
-    // Non-interactive: detect providers from environment variables
-    if (nonInteractive) {
-      const envProviders = detectEnvProviders();
-
-      if (envProviders.length === 0 && Object.keys(config.providers).length === 0) {
-        if (opts.json) {
-          outputError(
-            "No providers found",
-            "Set HOIST_HETZNER_API_KEY, HOIST_VULTR_API_KEY, or HOIST_DIGITALOCEAN_API_KEY environment variables."
-          );
-        } else {
-          outputError(
-            "No providers found. Set HOIST_HETZNER_API_KEY, HOIST_VULTR_API_KEY, or HOIST_DIGITALOCEAN_API_KEY."
-          );
-        }
-        process.exit(1);
-      }
-
+    if (envProviders.length > 0) {
+      const config: HoistConfig = getConfig();
       const results: Array<{ label: string; type: string; status: string; message?: string }> = [];
 
       for (const { type, apiKey, label } of envProviders) {
         if (config.providers[label]) {
-          // Update existing provider's key
           config.providers[label].apiKey = apiKey;
           results.push({ label, type, status: "updated" });
           continue;
@@ -87,8 +52,7 @@ export const initCommand = new Command("init")
         const result = await testProviderConnection(type, apiKey);
         if (result.ok) {
           config.providers[label] = { type, apiKey };
-          if (!firstProvider) {
-            firstProvider = label;
+          if (!config.defaults.provider) {
             config.defaults.provider = label;
           }
           results.push({ label, type, status: "added" });
@@ -104,18 +68,44 @@ export const initCommand = new Command("init")
       updateConfig(config);
       const written = writeAgentConfig();
 
-      if (opts.json) {
+      if (json) {
         outputJson({
           status: "initialized",
           providers: results,
           skills: written.length,
           restart: "Restart your AI agent to pick up the new skills.",
         });
+      } else {
+        for (const r of results) {
+          if (r.status === "failed") {
+            p.log.error(`${r.label}: ${r.message}`);
+          } else {
+            p.log.success(`${r.label} (${r.type}): ${r.status}`);
+          }
+        }
+        p.log.success(`Agent skills installed: ${written.length} files`);
+        p.log.info(chalk.dim("Restart your AI agent to pick up the new skills."));
       }
       return;
     }
 
-    // Interactive mode (human)
+    // No env vars — interactive mode (human)
+    p.intro(chalk.bold("Welcome to Hoist."));
+
+    if (hasConfig()) {
+      const overwrite = await p.confirm({
+        message: "Hoist is already configured. Reinitialize?",
+        initialValue: false,
+      });
+      if (p.isCancel(overwrite) || !overwrite) {
+        p.outro("Keeping existing configuration.");
+        return;
+      }
+    }
+
+    const config: HoistConfig = getConfig();
+    let firstProvider: string | undefined;
+
     let addMore = true;
     while (addMore) {
       const providerType = await p.select({

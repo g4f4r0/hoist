@@ -1,6 +1,7 @@
 import chalk from "chalk";
 
 let jsonMode = false;
+let autoYes = false;
 
 /** Enables or disables JSON output mode. */
 export function setJsonMode(enabled: boolean): void {
@@ -10,6 +11,16 @@ export function setJsonMode(enabled: boolean): void {
 /** Returns true when JSON output mode is active. */
 export function isJsonMode(): boolean {
   return jsonMode;
+}
+
+/** Enables or disables auto-yes mode (skip confirmations). */
+export function setAutoYes(enabled: boolean): void {
+  autoYes = enabled;
+}
+
+/** Returns true when auto-yes mode is active. */
+export function isAutoYes(): boolean {
+  return autoYes;
 }
 
 /** Writes data as formatted JSON to stdout. */

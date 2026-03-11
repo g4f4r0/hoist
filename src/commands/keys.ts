@@ -17,7 +17,7 @@ import {
 } from "../lib/ssh-keys.js";
 import { getProvider, type ServerInfo } from "../providers/index.js";
 import { exec, closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
 
 const { utils } = ssh2;
 
@@ -48,6 +48,7 @@ keysCommand
   .description("Show current public key path and fingerprint")
   .option("--json", "Output as JSON")
   .action(async (opts: { json?: boolean }) => {
+    const json = json || isJsonMode();
     if (!hasKeys()) {
       outputError("No SSH keys found. Run 'hoist init' first.");
       process.exit(1);
@@ -63,7 +64,7 @@ keysCommand
       publicKey,
     };
 
-    if (opts.json) {
+    if (json) {
       outputJson(result);
       return;
     }
@@ -78,6 +79,8 @@ keysCommand
   .option("--json", "Output as JSON")
   .option("--yes", "Skip confirmations")
   .action(async (opts: { json?: boolean; yes?: boolean }) => {
+    const json = json || isJsonMode();
+    const yes = yes || isAutoYes();
     if (!hasSetup()) {
       outputError("Run 'hoist init' first.");
       process.exit(1);
@@ -94,7 +97,7 @@ keysCommand
     const allServers: Array<ServerInfo & { provider: string }> = [];
     const spinner = p.spinner();
 
-    if (!opts.json) spinner.start("Fetching servers from all providers...");
+    if (!json) spinner.start("Fetching servers from all providers...");
 
     for (const name of labels) {
       const providerConfig = config.providers[name];
@@ -106,7 +109,7 @@ keysCommand
           allServers.push({ ...server, provider: name });
         }
       } catch (err) {
-        if (!opts.json) {
+        if (!json) {
           p.log.warning(
             `Failed to list servers from ${name}: ${err instanceof Error ? err.message : err}`
           );
@@ -114,7 +117,7 @@ keysCommand
       }
     }
 
-    if (!opts.json) spinner.stop(`Found ${allServers.length} server(s).`);
+    if (!json) spinner.stop(`Found ${allServers.length} server(s).`);
 
     const serversWithIp = allServers.filter((s) => s.ip);
 
@@ -123,7 +126,7 @@ keysCommand
       process.exit(1);
     }
 
-    if (!opts.yes && !opts.json) {
+    if (!yes && !json) {
       const confirmed = await p.confirm({
         message: `Rotate SSH keys across ${serversWithIp.length} server(s)?`,
       });
@@ -136,7 +139,7 @@ keysCommand
     const tmpPrivatePath = path.join(tmpDir, "hoist_ed25519");
     const tmpPublicPath = path.join(tmpDir, "hoist_ed25519.pub");
 
-    if (!opts.json) spinner.start("Generating new key pair...");
+    if (!json) spinner.start("Generating new key pair...");
 
     const newKeys = utils.generateKeyPairSync("ed25519", { comment: "hoist" });
     fs.writeFileSync(tmpPrivatePath, newKeys.private, { mode: 0o600 });
@@ -144,7 +147,7 @@ keysCommand
 
     const newPublicKey = newKeys.public.trim();
 
-    if (!opts.json) spinner.stop("New key pair generated.");
+    if (!json) spinner.stop("New key pair generated.");
 
     const results: Array<{
       server: string;
@@ -154,7 +157,7 @@ keysCommand
     }> = [];
 
     for (const server of serversWithIp) {
-      if (!opts.json)
+      if (!json)
         spinner.start(
           `Updating key on ${server.name} (${server.ip})...`
         );
@@ -186,7 +189,7 @@ keysCommand
         }
 
         results.push({ server: server.name, ip: server.ip, status: "ok" });
-        if (!opts.json)
+        if (!json)
           spinner.stop(
             `${chalk.green("Updated")} ${server.name} (${server.ip})`
           );
@@ -198,7 +201,7 @@ keysCommand
           status: "failed",
           error: message,
         });
-        if (!opts.json)
+        if (!json)
           spinner.stop(
             `${chalk.red("Failed")} ${server.name}: ${message}`
           );
@@ -210,12 +213,12 @@ keysCommand
     const failed = results.filter((r) => r.status === "failed");
 
     if (failed.length > 0) {
-      if (!opts.json) {
+      if (!json) {
         p.log.warning(
           `${failed.length} server(s) failed. Old keys left in temp dir: ${tmpDir}`
         );
       }
-      if (opts.json) {
+      if (json) {
         outputJson({
           status: "partial",
           message: `${failed.length} server(s) failed to update`,
@@ -233,7 +236,7 @@ keysCommand
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
 
-    if (opts.json) {
+    if (json) {
       outputJson({
         status: "success",
         message: "Keys rotated successfully",
