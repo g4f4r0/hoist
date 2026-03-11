@@ -258,7 +258,7 @@ The agent executes:
 ```bash
 $ hoist server create --name main --provider hetzner-1 --type cx22 --region fsn1 --json
 $ hoist deploy --service api --source . --server main --port 3000 --json
-$ hoist db create --name db --type postgres --version 16 --server main --json
+$ hoist template create --name db --type postgres --version 16 --server main --json
 $ hoist env set --service api DATABASE_URL="postgresql://..." --json
 $ hoist domain add --service api --domain api.myapp.com --json
 ```
@@ -328,7 +328,7 @@ hoist deploy --service api --source . --server main --port 3000
 ### Database creation
 
 ```
-hoist db create --name db --type postgres --version 16 --server main
+hoist template create --name db --type postgres --version 16 --server main
 
 1. SSH into server
 2. Generate 32-char secure password
@@ -487,7 +487,7 @@ hoist doctor
 
 ## Template registry
 
-Built-in database configs ship with the CLI: Postgres, MySQL, MariaDB, Redis, MongoDB. The agent doesn't need to know Docker details for these. `hoist db create postgres` just works.
+Built-in database configs ship with the CLI: Postgres, MySQL, MariaDB, Redis, MongoDB. The agent doesn't need to know Docker details for these. `hoist template create --type postgres` just works.
 
 For everything else (n8n, Plausible, Ghost, Umami, MinIO, Grafana, etc.), there's a public GitHub repo acting as a template registry.
 
@@ -801,11 +801,11 @@ hoist deploy --service <name>           # Deploy single service
 hoist rollback <service>                # Rollback to previous
 hoist exec <service> <command>          # Run in container
 
-hoist db create                         # Create database
-hoist db list                           # List databases
-hoist db backup <name>                  # Manual backup
-hoist db restore <name> <backup>        # Restore from backup
-hoist db destroy <name>                 # Destroy database
+hoist template create                         # Create database
+hoist template services                           # List databases
+hoist template backup <name>                  # Manual backup
+hoist template restore <name> <backup>        # Restore from backup
+hoist template destroy <name>                 # Destroy database
 
 hoist domain add <domain> --service <s> # Add domain
 hoist domain list                       # List all domains

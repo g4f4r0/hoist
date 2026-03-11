@@ -19,7 +19,7 @@ No test framework is configured yet. No ESLint config exists yet (script defined
 
 ## Architecture
 
-**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `rollback`, `domain`, `status`, `db`, `template`, `env`, `logs`, `doctor`, `update`.
+**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `rollback`, `domain`, `status`, `template`, `env`, `logs`, `doctor`, `update`.
 
 **Three layers:**
 
@@ -40,7 +40,7 @@ src/
 ```
 
 Organize by domain, not by technical role. As the project grows:
-- `src/commands/` — one file per command group (`server.ts`, `provider.ts`, `db.ts`)
+- `src/commands/` — one file per command group (`server.ts`, `provider.ts`, `template.ts`)
 - `src/providers/` — one file per provider (`hetzner.ts`, `vultr.ts`)
 - `src/lib/` — shared infrastructure used across commands
 - `src/types/` — shared type definitions when types are used across multiple domains
