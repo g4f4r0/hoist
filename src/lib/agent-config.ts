@@ -2,6 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+import { DOCKERFILES_MD } from "./dockerfiles-reference.js";
+
+export function generateSkillContent(): string {
+  // Strip Claude-specific frontmatter, return just the body
+  return generateClaudeSkill().replace(/^---[\s\S]*?---\n\n/, "");
+}
+
+export { generateCommandsReference };
+
 function generateClaudeSkill(): string {
   return [
     "---",
@@ -108,7 +117,7 @@ function generateClaudeSkill(): string {
     "Ask the user for each parameter before proceeding:",
     "",
     "1. **Server** — Which server? If none exist, ask: provider, region, type, name",
-    "2. **Service** — App (needs Dockerfile + port) or database (pick type + version)?",
+    "2. **Service** — App (needs Dockerfile + port) or database (pick type + version)? If no Dockerfile exists, generate one — see [DOCKERFILES.md](DOCKERFILES.md) for framework-specific examples.",
     "3. **Domain** (optional) — User must point DNS A record to server IP first",
     "4. **Env vars** (optional) — DATABASE_URL, API keys, etc.",
     "",
@@ -243,6 +252,10 @@ function generateCommandsReference(): string {
   ].join("\n");
 }
 
+export function generateDockerfileReference(): string {
+  return DOCKERFILES_MD;
+}
+
 function generateCodexSkill(): string {
   const lines: string[] = [
     "---",
@@ -275,8 +288,14 @@ export function writeAgentConfig(): string[] {
     generateCommandsReference(),
     "utf-8"
   );
+  fs.writeFileSync(
+    path.join(claudeSkillDir, "DOCKERFILES.md"),
+    generateDockerfileReference(),
+    "utf-8"
+  );
   written.push("~/.claude/skills/hoist/SKILL.md");
   written.push("~/.claude/skills/hoist/COMMANDS.md");
+  written.push("~/.claude/skills/hoist/DOCKERFILES.md");
 
   // Codex skill: ~/.agents/skills/hoist/
   const codexSkillDir = path.join(home, ".agents", "skills", "hoist");
@@ -291,8 +310,14 @@ export function writeAgentConfig(): string[] {
     generateCommandsReference(),
     "utf-8"
   );
+  fs.writeFileSync(
+    path.join(codexSkillDir, "DOCKERFILES.md"),
+    generateDockerfileReference(),
+    "utf-8"
+  );
   written.push("~/.agents/skills/hoist/SKILL.md");
   written.push("~/.agents/skills/hoist/COMMANDS.md");
+  written.push("~/.agents/skills/hoist/DOCKERFILES.md");
 
   return written;
 }

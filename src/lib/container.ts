@@ -36,7 +36,9 @@ export function buildDockerRunCmd(
 
   if (volumes) {
     for (const [vol, mount] of Object.entries(volumes)) {
-      parts.push(`-v ${vol}:${mount}`);
+      const escapedVol = vol.replace(/'/g, "'\\''");
+      const escapedMount = mount.replace(/'/g, "'\\''");
+      parts.push(`-v '${escapedVol}:${escapedMount}'`);
     }
   }
 
@@ -67,6 +69,10 @@ export async function checkContainerHealth(
       throw new Error(`Container ${container} is not running after startup`);
     }
     return;
+  }
+
+  if (port === undefined) {
+    throw new Error(`Health check requires a port but none was configured for ${container}`);
   }
 
   const delayMs = healthCheck.interval ? healthCheck.interval * 1000 : HEALTH_CHECK_DELAY_MS;

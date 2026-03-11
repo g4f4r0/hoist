@@ -15,6 +15,7 @@ import { rollbackCommand } from "./commands/rollback.js";
 import { updateCommand } from "./commands/update.js";
 import { keysCommand } from "./commands/keys.js";
 import { configCommand } from "./commands/config.js";
+import { skillCommand } from "./commands/skill.js";
 import { closeAll } from "./lib/ssh.js";
 import { checkForUpdate } from "./lib/version-check.js";
 import { showStatus } from "./lib/status-check.js";
@@ -46,6 +47,7 @@ program.addCommand(rollbackCommand);
 program.addCommand(updateCommand);
 program.addCommand(keysCommand);
 program.addCommand(configCommand);
+program.addCommand(skillCommand);
 
 process.on("SIGINT", () => {
   closeAll();

@@ -146,14 +146,32 @@ describe("validateProjectConfig", () => {
     ).toThrow('"provider" must be a non-empty string');
   });
 
-  it("rejects app service with missing port", () => {
+  it("accepts app service without port (worker service)", () => {
+    const config = validateProjectConfig({
+      project: "x",
+      servers: { a: { provider: "h" } },
+      services: { worker: { server: "a", type: "app", source: "." } },
+    });
+    expect(config.services.worker.type).toBe("app");
+  });
+
+  it("rejects app service with domain but no port", () => {
     expect(() =>
       validateProjectConfig({
         project: "x",
         servers: { a: { provider: "h" } },
-        services: { web: { server: "a", type: "app", source: "." } },
+        services: { web: { server: "a", type: "app", source: ".", domain: "example.com" } },
       })
-    ).toThrow('"port" must be a number');
+    ).toThrow('"port" is required when "domain" is set');
+  });
+
+  it("accepts app service with volumes", () => {
+    const config = validateProjectConfig({
+      project: "x",
+      servers: { a: { provider: "h" } },
+      services: { worker: { server: "a", type: "app", source: ".", volumes: { data: "/app/data" } } },
+    });
+    expect((config.services.worker as AppServiceConfig).volumes).toEqual({ data: "/app/data" });
   });
 });
 
