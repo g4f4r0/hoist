@@ -16,47 +16,25 @@ function detectTargetFile(dir: string): "CLAUDE.md" | "AGENTS.md" {
 function generateInstructions(config?: ProjectConfig): string {
   const lines: string[] = [
     MARKER_START,
-    "## Hoist — AI-Driven Infrastructure CLI",
+    "## Hoist — Infrastructure CLI",
     "",
-    "Hoist manages servers, deployments, databases, domains, and environment variables on VPS providers (Hetzner, Vultr, DigitalOcean).",
+    "Manages servers, deployments, databases, domains, and env vars on Hetzner, Vultr, DigitalOcean.",
     "Always use `--json` for structured output. Use `--yes` to skip confirmations.",
     "",
-    "### Commands",
+    "### Sensitive Operations — Human in the Loop",
     "",
-    "| Command | Description |",
-    "|---------|-------------|",
-    "| `hoist server create` | Provision a new VPS |",
-    "| `hoist server list` | List all servers |",
-    "| `hoist server destroy <name>` | Destroy a server |",
-    "| `hoist deploy` | Deploy an app (local source or `--repo <url>`) |",
-    "| `hoist rollback --service <name>` | Roll back to previous deployment |",
-    "| `hoist template list` | List available templates |",
-    "| `hoist template create` | Create a service from a template |",
-    "| `hoist template services` | List running template services |",
-    "| `hoist template inspect <name>` | Get service details |",
-    "| `hoist template destroy <name>` | Destroy a template service |",
-    "| `hoist template stop/start/restart <name>` | Control a template service |",
-    "| `hoist domain add <domain> --service <name>` | Route a domain to a service |",
-    "| `hoist domain list` | List domain routes |",
-    "| `hoist domain delete <domain>` | Delete a domain route |",
-    "| `hoist env set <service> KEY=VAL` | Set environment variables |",
-    "| `hoist env get <service> <key>` | Get an environment variable |",
-    "| `hoist env list <service>` | List environment variables |",
-    "| `hoist env delete <service> <key>` | Delete an environment variable |",
-    "| `hoist env import <service> <file>` | Import from .env file |",
-    "| `hoist env export <service>` | Export env as KEY=VALUE lines |",
-    "| `hoist logs <service>` | View service logs (`--follow`, `--lines`) |",
-    "| `hoist status` | Show project deployment status |",
-    "| `hoist doctor` | Run health checks |",
+    "**NEVER run these commands.** Tell the user to run them — they require interactive API key input:",
+    "`hoist init`, `hoist provider add`, `hoist provider update`",
     "",
     "### Workflow",
     "",
-    "1. Create `hoist.json` defining servers and services",
-    "2. `hoist server create --json` to provision",
-    "3. `hoist deploy --json` to deploy",
-    "4. `hoist status --json` to verify",
+    "1. Ensure user has run `hoist init`",
+    "2. Create `hoist.json` with servers and services",
+    "3. `hoist server create --json --yes`",
+    "4. `hoist deploy --json --yes`",
+    "5. `hoist status --json` to verify",
     "",
-    "All commands return structured JSON with `--json`. Parse stdout for data, check exit code for success (0) or failure (1).",
+    "Parse stdout for JSON. Exit code 0 = success, 1 = error. Run `hoist doctor --json` to diagnose issues.",
   ];
 
   if (config) {
@@ -64,10 +42,9 @@ function generateInstructions(config?: ProjectConfig): string {
     lines.push("### Current Project");
     lines.push("");
 
-    const serverNames = Object.keys(config.servers);
-    for (const name of serverNames) {
+    for (const name of Object.keys(config.servers)) {
       const s = config.servers[name];
-      lines.push(`- Server **${name}**: ${s.provider} ${s.type} in ${s.region}`);
+      lines.push(`- Server **${name}**: provider \`${s.provider}\``);
     }
 
     for (const [name, svc] of Object.entries(config.services)) {
@@ -87,71 +64,164 @@ function generateInstructions(config?: ProjectConfig): string {
 function generateClaudeSkill(config?: ProjectConfig): string {
   const lines: string[] = [
     "---",
-    "name: hoist",
-    "description: Use Hoist CLI to manage servers, deploy apps, manage databases, and configure infrastructure. Trigger when the user asks about deploying, provisioning servers, managing databases, or infrastructure tasks.",
+    "name: managing-infrastructure",
+    "description: Deploys and manages apps, servers, databases, domains, and environment variables on VPS providers (Hetzner, Vultr, DigitalOcean) using the Hoist CLI. Triggers when user mentions deploying, provisioning servers, creating databases, configuring domains, managing env vars, or checking infrastructure health.",
     "---",
     "",
     "# Hoist CLI",
     "",
-    "You have access to the `hoist` CLI for infrastructure management. Always use `--json` for structured output and `--yes` to skip confirmations.",
+    "## When to Use",
     "",
-    "## Available Commands",
+    '- "Deploy this app" -> `hoist deploy --json --yes`',
+    '- "Create a server" -> `hoist server create --json --yes`',
+    '- "Set up Postgres" -> `hoist template create --type postgres --json --yes`',
+    '- "Add a domain" -> `hoist domain add <domain> --service <name> --json`',
+    '- "What\'s running?" -> `hoist status --json`',
+    '- "Check health" -> `hoist doctor --json`',
     "",
-    "```bash",
-    "# Servers",
-    "hoist server create --name <n> --provider <p> --type <t> --region <r> --json --yes",
-    "hoist server list --json",
-    "hoist server destroy <name> --json --yes",
+    "## When NOT to Use",
     "",
-    "# Deploy",
-    "hoist deploy --json --yes",
-    "hoist deploy --repo <url> --branch <branch> --json --yes",
-    "hoist rollback --service <name> --json --yes",
+    "- **Setup commands** (`hoist init`, `hoist provider add`, `hoist provider update`) — require human API key input. Tell the user to run these.",
+    "- **General coding** — Hoist is for infrastructure only.",
     "",
-    "# Templates",
-    "hoist template list --json",
-    "hoist template create --name <n> --type <type> --server <s> --json --yes",
-    "hoist template services --json",
-    "hoist template inspect <name> --json",
-    "hoist template destroy <name> --json --yes",
-    "hoist template stop/start/restart <name> --json",
+    "---",
     "",
-    "# Domains",
-    "hoist domain add <domain> --service <name> --json",
-    "hoist domain list --json",
-    "hoist domain delete <domain> --json --yes",
+    "## Decision Tree",
     "",
-    "# Environment Variables",
-    "hoist env set <service> KEY=VAL KEY2=VAL2 --json",
-    "hoist env get <service> <key> --json",
-    "hoist env list <service> --show-values --json",
-    "hoist env delete <service> <key> --json",
-    "hoist env import <service> .env --json",
-    "hoist env export <service> --json",
-    "",
-    "# Monitoring",
-    "hoist logs <service> --lines 100 --json",
-    "hoist status --json",
-    "hoist doctor --json",
+    "```",
+    "Is hoist configured? (hoist provider list --json)",
+    "+-- NO -> Tell user to run: hoist init",
+    "+-- YES -> Does hoist.json exist?",
+    "    +-- NO -> Create hoist.json",
+    "    +-- YES -> What does the user want?",
+    "        +-- New server     -> hoist server create --json --yes",
+    "        +-- Import server  -> hoist server import --name X --ip Y --json --yes",
+    "        +-- Deploy app     -> hoist deploy --json --yes",
+    "        +-- Add database   -> hoist template create --type postgres --json --yes",
+    "        +-- Add domain     -> hoist domain add <domain> --service <name> --json",
+    "        +-- Set env vars   -> hoist env set <service> KEY=VAL --json",
+    "        +-- Check status   -> hoist status --json",
+    "        +-- Diagnose issue -> hoist doctor --json",
     "```",
     "",
-    "## Important",
+    "---",
     "",
-    "- All commands support `--json` for structured output — always use it",
-    "- Check exit code: 0 = success, 1 = error",
-    "- Parse stdout for JSON data, stderr has human-readable messages",
-    "- The project must have a `hoist.json` file defining servers and services",
-    "- Run `hoist doctor --json` to diagnose issues",
+    "## Sensitive Operations — Human in the Loop",
+    "",
+    "**NEVER run these commands.** They prompt for API keys interactively:",
+    "",
+    "| Command | User action |",
+    "|---------|------------|",
+    "| `hoist init` | Enter provider type + API key |",
+    "| `hoist provider add` | Enter provider type + API key |",
+    "| `hoist provider update <label>` | Enter new API key |",
+    "| `hoist keys rotate` | Confirm key rotation on all servers |",
+    "",
+    "Tell the user exactly what to run and what to expect.",
+    "",
+    "---",
+    "",
+    "## Commands",
+    "",
+    "For full command reference with all flags, see [COMMANDS.md](COMMANDS.md).",
+    "",
+    "**Servers:** `server create`, `server import`, `server list`, `server status <name>`, `server ssh <name>`, `server destroy <name>`",
+    "",
+    "**Deploy:** `deploy`, `rollback --service <name>`",
+    "",
+    "**Templates:** `template list`, `template create --type <type>`, `template services`, `template inspect <name>`, `template backup <name>`, `template destroy <name>`, `template stop/start/restart <name>`",
+    "",
+    "**Domains:** `domain add <domain> --service <name>`, `domain list`, `domain delete <domain>`",
+    "",
+    "**Env vars:** `env set <service> KEY=VAL`, `env get <service> <key>`, `env list <service>`, `env delete <service> <key>`, `env import <service> <file>`, `env export <service>`",
+    "",
+    "**Monitoring:** `logs <service>`, `status`, `doctor`",
+    "",
+    "**Other:** `keys show`, `config validate`",
+    "",
+    "All commands support `--json` and `--yes`.",
+    "",
+    "---",
+    "",
+    "## Interactive Deployment Procedure",
+    "",
+    "Ask the user for each parameter before proceeding:",
+    "",
+    "1. **Server** — Which server? If none exist, ask: provider, region, type, name",
+    "2. **Service** — App (needs Dockerfile + port) or database (pick type + version)?",
+    "3. **Domain** (optional) — User must point DNS A record to server IP first",
+    "4. **Env vars** (optional) — DATABASE_URL, API keys, etc.",
+    "",
+    "---",
+    "",
+    "## After Deploying",
+    "",
+    "1. `hoist status --json` — verify deployment",
+    "2. `hoist domain add <domain> --service <name> --json` — custom domain + auto-SSL",
+    "3. `hoist doctor --json` — health check",
+    "",
+    "## After Adding a Database",
+    "",
+    "1. `hoist template inspect <name> --json` — get credentials",
+    "2. `hoist env set <app> DATABASE_URL=<url> --json` — inject into app",
+    "",
+    "## After an Error",
+    "",
+    "1. `hoist doctor --json` — diagnose",
+    "2. `hoist logs <service> --lines 200 --json` — check logs",
+    "3. `hoist rollback --service <name> --json --yes` — revert bad deploy",
+    "",
+    "---",
+    "",
+    "## hoist.json",
+    "",
+    "Servers only need `provider`. Server specs (type, region) live on the provider, not in project config.",
+    "",
+    "```json",
+    "{",
+    '  "project": "my-app",',
+    '  "servers": { "prod": { "provider": "hetzner-1" } },',
+    '  "services": {',
+    '    "api": { "server": "prod", "type": "app", "source": ".", "port": 3000 },',
+    '    "db": { "server": "prod", "type": "postgres", "version": "16" }',
+    "  }",
+    "}",
+    "```",
+    "",
+    "---",
+    "",
+    "## Error Reference",
+    "",
+    "| Error | Solution |",
+    "|-------|----------|",
+    '| "Run hoist init first" | Tell user to run `hoist init` |',
+    '| "Provider not found" | Check `hoist provider list` for correct label |',
+    '| "Server not found" | Check `hoist server list --json` |',
+    '| "SSH connection failed" | Run `hoist doctor --json`, verify IP |',
+    '| "No hoist.json found" | Create hoist.json in project root |',
+    '| "references unknown server" | Server name in service must match servers section |',
+    "",
+    "---",
+    "",
+    "## Golden Rules",
+    "",
+    "1. Always use `--json` and `--yes`",
+    "2. Never handle API keys — tell user to run setup commands",
+    "3. Parse stdout for JSON, check exit code (0 = ok, 1 = error)",
+    "4. Run `hoist doctor --json` to diagnose any issue",
+    "5. Server names in hoist.json must match what was used during creation",
   ];
 
   if (config) {
     lines.push("");
+    lines.push("---");
+    lines.push("");
     lines.push("## Current Project");
     lines.push("");
-    lines.push(`Project: ${config.project}`);
+    lines.push(`Project: **${config.project}**`);
     lines.push("");
     for (const [name, s] of Object.entries(config.servers)) {
-      lines.push(`- Server \`${name}\`: ${s.provider} ${s.type} in ${s.region}`);
+      lines.push(`- Server \`${name}\`: provider \`${s.provider}\``);
     }
     for (const [name, svc] of Object.entries(config.services)) {
       if (isAppService(svc)) {
@@ -167,11 +237,87 @@ function generateClaudeSkill(config?: ProjectConfig): string {
   return lines.join("\n");
 }
 
+function generateCommandsReference(): string {
+  return [
+    "# Hoist CLI — Full Command Reference",
+    "",
+    "## Servers",
+    "",
+    "```bash",
+    "hoist server create --name <n> --provider <p> --type <t> --region <r> --json --yes",
+    "hoist server import --name <n> --ip <ip> --json --yes",
+    "hoist server list --json",
+    "hoist server status <name> --json",
+    "hoist server ssh <name>",
+    "hoist server destroy <name> --json --yes",
+    "```",
+    "",
+    "## Deploy & Rollback",
+    "",
+    "```bash",
+    "hoist deploy --json --yes                    # From Dockerfile in current dir",
+    "hoist deploy --repo <url> --json --yes       # From Git repo",
+    "hoist rollback --service <name> --json --yes",
+    "```",
+    "",
+    "## Templates (Databases & Services)",
+    "",
+    "```bash",
+    "hoist template list --json",
+    "hoist template create --name <n> --type <type> --server <s> --json --yes",
+    "hoist template services --json",
+    "hoist template inspect <name> --json",
+    "hoist template backup <name> --json",
+    "hoist template destroy <name> --json --yes",
+    "hoist template stop <name> --json",
+    "hoist template start <name> --json",
+    "hoist template restart <name> --json",
+    "```",
+    "",
+    "Supported types: `postgres`, `mysql`, `mariadb`, `redis`, `mongodb`",
+    "",
+    "## Domains & SSL",
+    "",
+    "```bash",
+    "hoist domain add <domain> --service <name> --json   # Auto-SSL via Caddy",
+    "hoist domain list --json",
+    "hoist domain delete <domain> --json --yes",
+    "```",
+    "",
+    "## Environment Variables",
+    "",
+    "```bash",
+    "hoist env set <service> KEY=VAL KEY2=VAL2 --json",
+    "hoist env get <service> <key> --json",
+    "hoist env list <service> --show-values --json",
+    "hoist env delete <service> <key> --json",
+    "hoist env import <service> .env --json",
+    "hoist env export <service> --json",
+    "```",
+    "",
+    "## Monitoring & Health",
+    "",
+    "```bash",
+    "hoist logs <service> --lines 100 --json",
+    "hoist status --json",
+    "hoist doctor --json",
+    "```",
+    "",
+    "## SSH Keys & Config",
+    "",
+    "```bash",
+    "hoist keys show --json",
+    "hoist config validate --json",
+    "```",
+    "",
+  ].join("\n");
+}
+
 function generateCodexSkill(config?: ProjectConfig): string {
   const lines: string[] = [
     "---",
-    "name: hoist",
-    "description: Use when the user asks about deploying apps, provisioning servers, managing databases, configuring domains, or any infrastructure task. Do not use for general coding questions unrelated to deployment or infrastructure.",
+    "name: managing-infrastructure",
+    "description: Deploys and manages apps, servers, databases, domains, and environment variables on VPS providers using the Hoist CLI. Triggers when user mentions deploying, provisioning, databases, domains, env vars, or infrastructure health.",
     "---",
     "",
   ];
@@ -218,6 +364,7 @@ export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] 
     written.push("AGENTS.md");
   }
 
+  // Claude skill: SKILL.md + COMMANDS.md (progressive disclosure)
   const claudeSkillDir = path.join(dir, ".claude", "skills", "hoist");
   fs.mkdirSync(claudeSkillDir, { recursive: true });
   fs.writeFileSync(
@@ -225,8 +372,15 @@ export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] 
     generateClaudeSkill(config),
     "utf-8"
   );
+  fs.writeFileSync(
+    path.join(claudeSkillDir, "COMMANDS.md"),
+    generateCommandsReference(),
+    "utf-8"
+  );
   written.push(".claude/skills/hoist/SKILL.md");
+  written.push(".claude/skills/hoist/COMMANDS.md");
 
+  // Codex skill: SKILL.md + COMMANDS.md
   const codexSkillDir = path.join(dir, ".agents", "skills", "hoist");
   fs.mkdirSync(codexSkillDir, { recursive: true });
   fs.writeFileSync(
@@ -234,7 +388,13 @@ export function writeAgentConfig(dir: string, config?: ProjectConfig): string[] 
     generateCodexSkill(config),
     "utf-8"
   );
+  fs.writeFileSync(
+    path.join(codexSkillDir, "COMMANDS.md"),
+    generateCommandsReference(),
+    "utf-8"
+  );
   written.push(".agents/skills/hoist/SKILL.md");
+  written.push(".agents/skills/hoist/COMMANDS.md");
 
   return written;
 }

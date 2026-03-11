@@ -12,7 +12,7 @@ import {
 const validConfig = {
   project: "myapp",
   servers: {
-    prod: { provider: "hetzner", type: "cx22", region: "fsn1" },
+    prod: { provider: "hetzner" },
   },
   services: {
     web: {
@@ -50,13 +50,13 @@ describe("validateProjectConfig", () => {
 
   it("rejects missing project", () => {
     expect(() =>
-      validateProjectConfig({ servers: { a: { provider: "h", type: "t", region: "r" } }, services: {} })
+      validateProjectConfig({ servers: { a: { provider: "h" } }, services: {} })
     ).toThrow('"project" must be a non-empty string');
   });
 
   it("rejects empty project string", () => {
     expect(() =>
-      validateProjectConfig({ project: "", servers: { a: { provider: "h", type: "t", region: "r" } }, services: {} })
+      validateProjectConfig({ project: "", servers: { a: { provider: "h" } }, services: {} })
     ).toThrow('"project" must be a non-empty string');
   });
 
@@ -74,7 +74,7 @@ describe("validateProjectConfig", () => {
 
   it("rejects missing services", () => {
     expect(() =>
-      validateProjectConfig({ project: "x", servers: { a: { provider: "h", type: "t", region: "r" } } })
+      validateProjectConfig({ project: "x", servers: { a: { provider: "h" } } })
     ).toThrow('"services" must be an object');
   });
 
@@ -82,7 +82,7 @@ describe("validateProjectConfig", () => {
     expect(() =>
       validateProjectConfig({
         project: "x",
-        servers: { a: { provider: "hetzner", type: "cx22", region: "fsn1" } },
+        servers: { a: { provider: "hetzner" } },
         services: { web: { server: "nonexistent", type: "app", source: ".", port: 3000 } },
       })
     ).toThrow('references unknown server "nonexistent"');
@@ -92,7 +92,7 @@ describe("validateProjectConfig", () => {
     expect(() =>
       validateProjectConfig({
         project: "x",
-        servers: { a: { provider: "hetzner", type: "cx22", region: "fsn1" } },
+        servers: { a: { provider: "hetzner" } },
         services: { web: { server: "a", type: "oracle", version: "1" } },
       })
     ).toThrow('unknown type "oracle"');
@@ -101,7 +101,7 @@ describe("validateProjectConfig", () => {
   it("validates app service with all optional fields", () => {
     const config = {
       project: "x",
-      servers: { a: { provider: "h", type: "t", region: "r" } },
+      servers: { a: { provider: "h" } },
       services: {
         web: {
           server: "a",
@@ -128,7 +128,7 @@ describe("validateProjectConfig", () => {
     for (const type of ["postgres", "mysql", "mariadb", "redis", "mongodb"]) {
       const config = {
         project: "x",
-        servers: { a: { provider: "h", type: "t", region: "r" } },
+        servers: { a: { provider: "h" } },
         services: { db: { server: "a", type, version: "1" } },
       };
       const result = validateProjectConfig(config);
@@ -140,7 +140,7 @@ describe("validateProjectConfig", () => {
     expect(() =>
       validateProjectConfig({
         project: "x",
-        servers: { a: { type: "cx22", region: "fsn1" } },
+        servers: { a: {} },
         services: {},
       })
     ).toThrow('"provider" must be a non-empty string');
@@ -150,7 +150,7 @@ describe("validateProjectConfig", () => {
     expect(() =>
       validateProjectConfig({
         project: "x",
-        servers: { a: { provider: "h", type: "t", region: "r" } },
+        servers: { a: { provider: "h" } },
         services: { web: { server: "a", type: "app", source: "." } },
       })
     ).toThrow('"port" must be a number');
@@ -182,8 +182,8 @@ describe("getDefaultServer", () => {
     const multi = validateProjectConfig({
       ...validConfig,
       servers: {
-        prod: { provider: "h", type: "t", region: "r" },
-        staging: { provider: "h", type: "t", region: "r" },
+        prod: { provider: "h" },
+        staging: { provider: "h" },
       },
     });
     expect(() => getDefaultServer(multi)).toThrow("Multiple servers");

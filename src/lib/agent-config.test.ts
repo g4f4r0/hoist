@@ -19,7 +19,7 @@ afterEach(() => {
 const mockConfig: ProjectConfig = {
   project: "testapp",
   servers: {
-    prod: { provider: "hetzner", type: "cx22", region: "fsn1" },
+    prod: { provider: "hetzner" },
   },
   services: {
     web: {
@@ -114,8 +114,29 @@ describe("writeAgentConfig", () => {
       "utf-8"
     );
     expect(content).toMatch(/^---\n/);
-    expect(content).toContain("name: hoist");
+    expect(content).toContain("name: managing-infrastructure");
     expect(content).toContain("description:");
+  });
+
+  it("creates COMMANDS.md for progressive disclosure", () => {
+    writeAgentConfig(tmpDir);
+    const claudeCmd = path.join(tmpDir, ".claude", "skills", "hoist", "COMMANDS.md");
+    const codexCmd = path.join(tmpDir, ".agents", "skills", "hoist", "COMMANDS.md");
+    expect(fs.existsSync(claudeCmd)).toBe(true);
+    expect(fs.existsSync(codexCmd)).toBe(true);
+    const content = fs.readFileSync(claudeCmd, "utf-8");
+    expect(content).toContain("hoist server create");
+    expect(content).toContain("hoist deploy");
+    expect(content).toContain("hoist template");
+  });
+
+  it("skill references COMMANDS.md", () => {
+    writeAgentConfig(tmpDir);
+    const content = fs.readFileSync(
+      path.join(tmpDir, ".claude", "skills", "hoist", "SKILL.md"),
+      "utf-8"
+    );
+    expect(content).toContain("COMMANDS.md");
   });
 
   it("generates valid Codex skill with frontmatter", () => {
@@ -125,7 +146,7 @@ describe("writeAgentConfig", () => {
       "utf-8"
     );
     expect(content).toMatch(/^---\n/);
-    expect(content).toContain("name: hoist");
+    expect(content).toContain("name: managing-infrastructure");
     expect(content).toContain("description:");
   });
 });

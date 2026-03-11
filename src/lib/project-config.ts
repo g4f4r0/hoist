@@ -41,8 +41,6 @@ export type ServiceConfig = AppServiceConfig | DatabaseServiceConfig;
 
 export interface ServerConfig {
   provider: string;
-  type: string;
-  region: string;
 }
 
 export interface ProjectConfig {
@@ -127,8 +125,6 @@ function validateServer(raw: unknown, name: string): ServerConfig {
   }
   return {
     provider: requireString(raw, "provider", ctx),
-    type: requireString(raw, "type", ctx),
-    region: requireString(raw, "region", ctx),
   };
 }
 

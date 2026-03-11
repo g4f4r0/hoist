@@ -190,9 +190,7 @@ Everything on the server runs in Docker. Containers communicate over an internal
   "project": "my-saas",
   "servers": {
     "prod": {
-      "provider": "hetzner-1",
-      "type": "cx22",
-      "region": "fsn1"
+      "provider": "hetzner-1"
     }
   },
   "services": {
