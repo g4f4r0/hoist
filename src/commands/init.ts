@@ -30,9 +30,8 @@ function formatProviderName(type: string): string {
 
 export const initCommand = new Command("init")
   .description("Set up Hoist on this machine")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = opts.json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
     ensureHoistDir();
 
     // Auto-detect: if env vars are set, configure providers automatically

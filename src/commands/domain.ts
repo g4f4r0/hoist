@@ -5,7 +5,7 @@ import { loadProjectConfig, isAppService, getOnlyAppService } from "../lib/proje
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
 import { addRoute, deleteRoute, listRoutes } from "../lib/caddy.js";
 import { closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
 
 export const domainCommand = new Command("domain").description(
   "Manage domains and routing"
@@ -16,13 +16,12 @@ domainCommand
   .description("Add a domain route for a service")
   .argument("<domain>", "Domain name")
   .option("--service <name>", "Service name (auto-detected if only one app service)")
-  .option("--json", "Output as JSON")
   .action(
     async (
       domain: string,
-      opts: { service?: string; json?: boolean }
+      opts: { service?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
 
       let config;
       try {
@@ -96,9 +95,8 @@ domainCommand
 domainCommand
   .command("list")
   .description("List all domain routes")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = opts.json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
 
     let config;
     try {
@@ -160,15 +158,13 @@ domainCommand
   .command("delete")
   .description("Delete a domain route")
   .argument("<domain>", "Domain name")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmation")
   .action(
     async (
       domain: string,
-      opts: { json?: boolean; yes?: boolean }
+      opts: { }
     ) => {
-      const json = opts.json || isJsonMode();
-      const yes = opts.yes || isAutoYes();
+      const json = isJsonMode();
+      const yes = isAutoConfirm();
 
       let config;
       try {

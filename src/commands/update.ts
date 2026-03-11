@@ -12,9 +12,8 @@ import { outputJson, outputError, outputSuccess, isJsonMode } from "../lib/outpu
 
 export const updateCommand = new Command("update")
   .description("Update agent skill files and check for CLI updates")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
     const current = __VERSION__;
 
     // 1. Update skill files

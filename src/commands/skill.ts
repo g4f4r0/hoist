@@ -49,13 +49,11 @@ skillCommand
   .option("--name <name>", "Skill name", "hoist")
   .option("--skill-version <version>", "Skill version", "1.0.0")
   .option("-o, --output <path>", "Output directory", ".")
-  .option("--json", "Output as JSON")
   .action(
     async (opts: {
       name: string;
       skillVersion: string;
       output: string;
-      json?: boolean;
     }) => {
       const version = opts.skillVersion;
       const description =
@@ -89,7 +87,7 @@ skillCommand
           });
         }
 
-        if ((opts.json || isJsonMode())) {
+        if ((isJsonMode())) {
           outputJson({
             exported: outputPath,
             name: opts.name,

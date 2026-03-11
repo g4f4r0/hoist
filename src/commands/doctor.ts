@@ -182,9 +182,8 @@ function formatChecks(checks: CheckResult[]): void {
 
 export const doctorCommand = new Command("doctor")
   .description("Run health checks on local setup, providers, and project")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
     const allChecks: CheckResult[] = [];
 
     if (!json) {

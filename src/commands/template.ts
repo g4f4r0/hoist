@@ -10,7 +10,7 @@ import { listTemplates, getTemplate } from "../lib/templates/index.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
 import { loadProjectConfig, getDefaultServer } from "../lib/project-config.js";
 import { closeConnection, execOrFail, type SSHConnectionOptions } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
 
 export const templateCommand = new Command("template").description(
   "Manage templates and template-based services"
@@ -19,9 +19,8 @@ export const templateCommand = new Command("template").description(
 templateCommand
   .command("list")
   .description("List all available templates")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = opts.json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
     const templates = listTemplates();
 
     if (json) {
@@ -43,9 +42,8 @@ templateCommand
   .command("info")
   .description("Show template details")
   .argument("<name>", "Template name")
-  .option("--json", "Output as JSON")
-  .action(async (name: string, opts: { json?: boolean }) => {
-    const json = opts.json || isJsonMode();
+  .action(async (name: string, opts: { }) => {
+    const json = isJsonMode();
     let template;
     try {
       template = getTemplate(name);
@@ -83,18 +81,14 @@ templateCommand
   .option("--type <type>", "Template type")
   .option("--version <version>", "Version override")
   .option("--server <server>", "Target server name (auto-detected if only one)")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmations")
   .action(
     async (opts: {
       name?: string;
       type?: string;
       version?: string;
       server?: string;
-      json?: boolean;
-      yes?: boolean;
     }) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       const templates = listTemplates();
 
       let templateType = opts.type;
@@ -232,9 +226,8 @@ templateCommand
   .command("services")
   .description("List running services created from templates")
   .option("--server <server>", "Filter by server name")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { server?: string; json?: boolean }) => {
-    const json = opts.json || isJsonMode();
+  .action(async (opts: { server?: string }) => {
+    const json = isJsonMode();
 
     let config;
     try {
@@ -312,13 +305,12 @@ templateCommand
   .description("Show details of a running template service")
   .argument("<name>", "Service name")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .action(
     async (
       name: string,
-      opts: { server?: string; json?: boolean }
+      opts: { server?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
 
       let config;
       try {
@@ -386,16 +378,14 @@ templateCommand
   .description("Destroy a template service")
   .argument("<name>", "Service name")
   .option("--server <server>", "Server name")
-  .option("--yes", "Skip confirmation")
-  .option("--json", "Output as JSON")
   .option("--delete-volumes", "Also delete data volumes")
   .action(
     async (
       name: string,
-      opts: { server?: string; yes?: boolean; json?: boolean; deleteVolumes?: boolean }
+      opts: { server?: string; deleteVolumes?: boolean }
     ) => {
-      const json = opts.json || isJsonMode();
-      const yes = opts.yes || isAutoYes();
+      const json = isJsonMode();
+      const yes = isAutoConfirm();
 
       if (!yes && !json) {
         const confirmed = await p.confirm({
@@ -470,13 +460,12 @@ templateCommand
   .argument("<name>", "Service name")
   .option("--server <server>", "Server name")
   .option("--output <path>", "Output file path")
-  .option("--json", "Output as JSON")
   .action(
     async (
       name: string,
-      opts: { server?: string; output?: string; json?: boolean }
+      opts: { server?: string; output?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
 
       let config;
       try {
@@ -603,13 +592,12 @@ for (const action of ["stop", "start", "restart"] as const) {
     .description(`${action.charAt(0).toUpperCase() + action.slice(1)} a template service`)
     .argument("<name>", "Service name")
     .option("--server <server>", "Server name")
-    .option("--json", "Output as JSON")
     .action(
       async (
         name: string,
-        opts: { server?: string; json?: boolean }
+        opts: { server?: string }
       ) => {
-        const json = opts.json || isJsonMode();
+        const json = isJsonMode();
 
         let config;
         try {

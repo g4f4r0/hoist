@@ -12,14 +12,14 @@ import { templateCommand } from "./commands/template.js";
 import { envCommand } from "./commands/env.js";
 import { logsCommand } from "./commands/logs.js";
 import { rollbackCommand } from "./commands/rollback.js";
-import { updateCommand } from "./commands/update.js";
+
 import { keysCommand } from "./commands/keys.js";
 import { configCommand } from "./commands/config.js";
 import { skillCommand } from "./commands/skill.js";
 import { closeAll } from "./lib/ssh.js";
 import { checkForUpdate } from "./lib/version-check.js";
 import { showStatus } from "./lib/status-check.js";
-import { setJsonMode, setAutoYes } from "./lib/output.js";
+import { setJsonMode, setAutoConfirm } from "./lib/output.js";
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
@@ -27,7 +27,7 @@ const VERSION = __VERSION__;
 // Non-TTY = agent calling us. Auto-enable JSON output and skip confirmations.
 if (!process.stdout.isTTY) {
   setJsonMode(true);
-  setAutoYes(true);
+  setAutoConfirm(true);
 }
 
 const program = new Command();
@@ -51,7 +51,7 @@ program.addCommand(templateCommand);
 program.addCommand(envCommand);
 program.addCommand(logsCommand);
 program.addCommand(rollbackCommand);
-program.addCommand(updateCommand);
+
 program.addCommand(keysCommand);
 program.addCommand(configCommand);
 program.addCommand(skillCommand);

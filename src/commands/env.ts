@@ -27,14 +27,13 @@ envCommand
   .argument("<service>", "Service name")
   .argument("[vars...]", "KEY=VALUE pairs")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       vars: string[],
-      opts: { server?: string; json?: boolean }
+      opts: { server?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
@@ -77,14 +76,13 @@ envCommand
   .argument("<service>", "Service name")
   .argument("<key>", "Environment variable key")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       key: string,
-      opts: { server?: string; json?: boolean }
+      opts: { server?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
@@ -122,14 +120,13 @@ envCommand
   .description("List environment variables for a service")
   .argument("<service>", "Service name")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .option("--show-values", "Show actual values instead of masking")
   .action(
     async (
       service: string,
-      opts: { server?: string; json?: boolean; showValues?: boolean }
+      opts: { server?: string; showValues?: boolean }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
@@ -169,14 +166,13 @@ envCommand
   .argument("<service>", "Service name")
   .argument("<key>", "Environment variable key to delete")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       key: string,
-      opts: { server?: string; json?: boolean }
+      opts: { server?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
@@ -223,14 +219,13 @@ envCommand
   .argument("<service>", "Service name")
   .argument("<file>", "Path to .env file")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
       file: string,
-      opts: { server?: string; json?: boolean }
+      opts: { server?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {
@@ -272,13 +267,12 @@ envCommand
   .description("Export environment variables as KEY=VALUE lines")
   .argument("<service>", "Service name")
   .option("--server <server>", "Server name")
-  .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
-      opts: { server?: string; json?: boolean }
+      opts: { server?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
       let ssh: SSHConnectionOptions | undefined;
 
       try {

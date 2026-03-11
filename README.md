@@ -55,19 +55,19 @@ npm install -g hoist-cli
 hoist init
 
 # 2. Create a server (~60 seconds)
-hoist server create --name prod --type cx22 --region fsn1
+hoist server create
 
 # 3. Deploy your app
-hoist deploy --service api
+hoist deploy
 
 # 4. Add a database
-hoist template create --name db --type postgres --version 16
+hoist template create --type postgres
 
 # 5. Point your domain (auto-SSL included)
-hoist domain add api.myapp.com --service api
+hoist domain add api.myapp.com
 ```
 
-Every command returns `--json` for agents. Your agent reads the output, handles errors, and moves to the next step.
+Your agent runs commands, reads structured JSON, and handles the full lifecycle autonomously.
 
 ---
 
@@ -82,11 +82,11 @@ Hoist installs a skill file that teaches your agent how to manage infrastructure
 Behind the conversation above, the agent ran:
 
 ```bash
-hoist server create --name prod --type cx22 --region fsn1 --json --yes
-hoist deploy --service api --json --yes
-hoist template create --name db --type postgres --version 16 --json --yes
-hoist env set api DATABASE_URL="postgresql://..." --json
-hoist domain add api.myapp.com --service api --json
+hoist server create --name prod --type cx22 --region fsn1
+hoist deploy
+hoist template create --type postgres --version 16
+hoist env set api DATABASE_URL="postgresql://..."
+hoist domain add api.myapp.com
 ```
 
 ---
@@ -202,17 +202,16 @@ hoist status                        # Full project overview
 hoist doctor                        # Health check everything
 hoist provider add|list|test|set-default|delete
 hoist keys show|rotate
-hoist update                        # Update agent skills + check for CLI updates
 hoist skill export                  # Package skills for publishing
 ```
 
-All commands support `--json`. Mutating commands support `--yes` to skip confirmations.
+Update: `npm install -g hoist-cli@latest`
 
 ---
 
 ## Agent integration
 
-Hoist implements the [Agent Skills](https://agentskills.io) open standard. After `hoist init` or `hoist update`, skill files are installed globally and auto-discovered by any compatible agent:
+Hoist implements the [Agent Skills](https://agentskills.io) open standard. After `hoist init`, skill files are installed globally and auto-discovered by any compatible agent:
 
 | Agent | Location |
 |-------|----------|
@@ -222,24 +221,33 @@ Hoist implements the [Agent Skills](https://agentskills.io) open standard. After
 | OpenCode | `~/.claude/skills/hoist/` or `~/.agents/skills/hoist/` |
 | Codex | `~/.agents/skills/hoist/` |
 
-Each skill includes `SKILL.md` (how to use Hoist), `COMMANDS.md` (full flag reference), and `DOCKERFILES.md` (framework-specific Docker patterns for Next.js, Remix, Astro, Python, Go, Rust, and more).
+Each skill includes `SKILL.md` (how to use Hoist), `COMMANDS.md` (full command reference), and `DOCKERFILES.md` (framework-specific Docker patterns for Next.js, Remix, Astro, Python, Go, Rust, and more).
 
 Any agent that supports the Agent Skills standard will pick up Hoist automatically — no manual configuration needed.
 
 ---
+
+## AI-native design
+
+Hoist is built for AI agents, not humans. Traditional CLIs need flags like `--json` or `--yes` to work with automation. Hoist detects it's being called by an agent (non-TTY) and adapts automatically:
+
+- **Structured JSON** on stdout, no spinners or color
+- **No interactive prompts** — missing args return errors, not input requests
+- **Smart defaults** — random server names, cheapest instance type, auto-selects the only service
+- **Skill files** — teach your agent the full deployment workflow, what to confirm, and how to recover from errors
+- **Humans welcome too** — in a terminal, Hoist shows interactive prompts, spinners, and color
 
 ## Security
 
 Hoist is designed so your AI agent can manage infrastructure without ever seeing your secrets.
 
 - **API keys stay on your machine** — stored with `600` permissions, never sent to agents or logged in output
-- **Agents never handle credentials directly** — setup commands (`hoist init`, `provider add`) are interactive and human-only; the skill file explicitly tells agents not to run them
-- **`--json` mode is non-interactive** — agents can't get stuck on confirmation prompts; missing required args return errors, not input prompts
+- **Agents never handle credentials directly** — setup commands (`hoist init`, `provider add`) are interactive and human-only
 - **SSH key-only auth** — password login disabled on all managed servers
 - **UFW firewall** — only ports 22, 80, 443 open
 - **Network isolation** — databases and services talk over an internal Docker network, never exposed to the internet
 - **Caddy reverse proxy** — containers are only reachable through Caddy, never bound to public ports directly
-- **No secrets in git** — env vars injected at runtime, `env list` masks values by default
+- **No secrets in git** — env vars injected at runtime, `env list` masks values in human mode
 
 ---
 

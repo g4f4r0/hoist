@@ -7,7 +7,7 @@ import { readPublicKey, hasKeys, getPrivateKeyPath } from "../lib/ssh-keys.js";
 import { getProvider, type ServerInfo } from "../providers/index.js";
 import { setupServer, checkHealth } from "../lib/server-setup.js";
 import { exec, execOrFail, closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
 import { getConfiguredProvider } from "../lib/server-resolve.js";
 import { generateRandomName } from "../lib/random-name.js";
 
@@ -26,19 +26,15 @@ serverCommand
   .option("--provider <provider>", "Provider label")
   .option("--type <type>", "Server type/plan (cheapest if omitted)")
   .option("--region <region>", "Server region (first available if omitted)")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmations")
   .action(
     async (opts: {
       name?: string;
       provider?: string;
       type?: string;
       region?: string;
-      json?: boolean;
-      yes?: boolean;
     }) => {
-      const json = opts.json || isJsonMode();
-      const yes = opts.yes || isAutoYes();
+      const json = isJsonMode();
+      const yes = isAutoConfirm();
 
       if (!hasSetup()) {
       outputError("Run 'hoist init' first.");
@@ -217,18 +213,14 @@ serverCommand
   .option("--name <name>", "Server name (random if omitted)")
   .option("--ip <ip>", "Server IP address")
   .option("--user <user>", "SSH user for initial connection", "root")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmations")
   .action(
     async (opts: {
       name?: string;
       ip?: string;
       user: string;
-      json?: boolean;
-      yes?: boolean;
     }) => {
-      const json = opts.json || isJsonMode();
-      const yes = opts.yes || isAutoYes();
+      const json = isJsonMode();
+      const yes = isAutoConfirm();
 
       if (!hasSetup()) {
       outputError("Run 'hoist init' first.");
@@ -367,9 +359,8 @@ serverCommand
   .command("list")
   .description("List all servers")
   .option("--provider <provider>", "Provider label (default: all)")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { provider?: string; json?: boolean }) => {
-    const json = opts.json || isJsonMode();
+  .action(async (opts: { provider?: string }) => {
+    const json = isJsonMode();
 
     if (!hasSetup()) {
       outputError("Run 'hoist init' first.");
@@ -445,13 +436,12 @@ serverCommand
   .description("Server details and health")
   .argument("<name>", "Server name")
   .option("--provider <provider>", "Provider label")
-  .option("--json", "Output as JSON")
   .action(
     async (
       name: string,
-      opts: { provider?: string; json?: boolean }
+      opts: { provider?: string }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
 
       if (!hasSetup()) {
       outputError("Run 'hoist init' first.");
@@ -544,15 +534,13 @@ serverCommand
   .description("Delete a server")
   .argument("<name>", "Server name")
   .option("--provider <provider>", "Provider label")
-  .option("--yes", "Skip confirmation")
-  .option("--json", "Output as JSON")
   .action(
     async (
       name: string,
-      opts: { provider?: string; yes?: boolean; json?: boolean }
+      opts: { provider?: string }
     ) => {
-      const json = opts.json || isJsonMode();
-      const yes = opts.yes || isAutoYes();
+      const json = isJsonMode();
+      const yes = isAutoConfirm();
 
       if (!hasSetup()) {
       outputError("Run 'hoist init' first.");

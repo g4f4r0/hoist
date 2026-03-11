@@ -6,7 +6,7 @@ import { loadProjectConfig, isAppService, type AppServiceConfig } from "../lib/p
 import { resolveServers } from "../lib/server-resolve.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { deployService } from "../lib/deploy.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
 
 interface DeployResult {
   service: string;
@@ -22,11 +22,9 @@ export const deployCommand = new Command("deploy")
   .option("--service <name>", "Deploy a specific service")
   .option("--repo <url>", "Deploy from a git repository URL")
   .option("--branch <branch>", "Git branch to deploy", "main")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmations")
-  .action(async (opts: { service?: string; repo?: string; branch: string; json?: boolean; yes?: boolean }) => {
-    const json = opts.json || isJsonMode();
-    const yes = opts.yes || isAutoYes();
+  .action(async (opts: { service?: string; repo?: string; branch: string }) => {
+    const json = isJsonMode();
+    const yes = isAutoConfirm();
 
     let config;
     try {

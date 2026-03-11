@@ -1,7 +1,7 @@
 import chalk from "chalk";
 
 let jsonMode = false;
-let autoYes = false;
+let autoConfirm = false;
 
 /** Enables or disables JSON output mode. */
 export function setJsonMode(enabled: boolean): void {
@@ -13,14 +13,14 @@ export function isJsonMode(): boolean {
   return jsonMode;
 }
 
-/** Enables or disables auto-yes mode (skip confirmations). */
-export function setAutoYes(enabled: boolean): void {
-  autoYes = enabled;
+/** Enables or disables auto-confirm mode (skip interactive confirmations). */
+export function setAutoConfirm(enabled: boolean): void {
+  autoConfirm = enabled;
 }
 
-/** Returns true when auto-yes mode is active. */
-export function isAutoYes(): boolean {
-  return autoYes;
+/** Returns true when auto-confirm mode is active (non-TTY / agent context). */
+export function isAutoConfirm(): boolean {
+  return autoConfirm;
 }
 
 /** Writes data as formatted JSON to stdout. */

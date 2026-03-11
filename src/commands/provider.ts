@@ -8,7 +8,7 @@ import {
   type ProviderConfig,
 } from "../lib/config.js";
 import { testProviderConnection } from "../providers/index.js";
-import { outputJson, outputSuccess, outputError, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputSuccess, outputError, isJsonMode, isAutoConfirm } from "../lib/output.js";
 
 const PROVIDER_TYPES = [
   { value: "hetzner", label: "Hetzner" },
@@ -23,8 +23,7 @@ export const providerCommand = new Command("provider").description(
 providerCommand
   .command("add")
   .description("Add a cloud provider")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
+  .action(async () => {
     if (!hasConfig()) {
       outputError("Run 'hoist init' first.");
       process.exit(1);
@@ -74,14 +73,14 @@ providerCommand
       }
       updateConfig(config);
 
-      if ((opts.json || isJsonMode())) {
+      if ((isJsonMode())) {
         outputJson({ status: "success", provider: label, type: providerType });
       } else {
         outputSuccess(`Provider "${label}" added.`);
       }
     } else {
       spinner.stop(chalk.red(`Verification failed: ${result.message}`));
-      if ((opts.json || isJsonMode())) {
+      if ((isJsonMode())) {
         outputError("Verification failed", result.message);
       }
       process.exit(1);
@@ -91,8 +90,7 @@ providerCommand
 providerCommand
   .command("list")
   .description("List configured providers")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
+  .action(async () => {
     const config = getConfig();
     const providers = Object.entries(config.providers).map(
       ([name, provider]) => ({
@@ -102,7 +100,7 @@ providerCommand
       })
     );
 
-    if ((opts.json || isJsonMode())) {
+    if ((isJsonMode())) {
       outputJson(providers);
       return;
     }
@@ -122,9 +120,7 @@ providerCommand
   .command("delete")
   .description("Delete a provider")
   .argument("[label]", "Provider label to delete")
-  .option("--yes", "Skip confirmation")
-  .option("--json", "Output as JSON")
-  .action(async (label?: string, opts?: { json?: boolean; yes?: boolean }) => {
+  .action(async (label?: string, opts?: { }) => {
     const config = getConfig();
     const labels = Object.keys(config.providers);
 
@@ -135,7 +131,7 @@ providerCommand
 
     let targetLabel = label;
     if (!targetLabel) {
-      if ((opts?.json || isJsonMode())) {
+      if ((isJsonMode())) {
         outputError("Provider label is required with --json");
         process.exit(1);
       }
@@ -152,7 +148,7 @@ providerCommand
       process.exit(1);
     }
 
-    if (!(opts?.yes || isAutoYes()) && !(opts?.json || isJsonMode())) {
+    if (!(isAutoConfirm()) && !(isJsonMode())) {
       const confirmed = await p.confirm({
         message: `Delete provider "${targetLabel}"?`,
       });
@@ -165,7 +161,7 @@ providerCommand
     }
     updateConfig(config);
 
-    if ((opts?.json || isJsonMode())) {
+    if ((isJsonMode())) {
       outputJson({ status: "deleted", provider: targetLabel });
     } else {
       outputSuccess(`Provider "${targetLabel}" deleted.`);
@@ -176,8 +172,7 @@ providerCommand
   .command("update")
   .description("Update API key for a provider")
   .argument("[label]", "Provider label to update")
-  .option("--json", "Output as JSON")
-  .action(async (label?: string, opts?: { json?: boolean }) => {
+  .action(async (label?: string, opts?: { }) => {
     const config = getConfig();
     const labels = Object.keys(config.providers);
 
@@ -219,14 +214,14 @@ providerCommand
       config.providers[targetLabel].apiKey = apiKey;
       updateConfig(config);
 
-      if ((opts?.json || isJsonMode())) {
+      if ((isJsonMode())) {
         outputJson({ status: "updated", provider: targetLabel });
       } else {
         outputSuccess(`Provider "${targetLabel}" API key updated.`);
       }
     } else {
       spinner.stop(chalk.red(`Verification failed: ${result.message}`));
-      if ((opts?.json || isJsonMode())) {
+      if ((isJsonMode())) {
         outputError("Verification failed", result.message);
       }
       process.exit(1);
@@ -237,8 +232,7 @@ providerCommand
   .command("test")
   .description("Verify provider API keys work")
   .argument("[label]", "Provider label to test")
-  .option("--json", "Output as JSON")
-  .action(async (label?: string, opts?: { json?: boolean }) => {
+  .action(async (label?: string, opts?: { }) => {
     const config = getConfig();
     const labels = label ? [label] : Object.keys(config.providers);
 
@@ -255,7 +249,7 @@ providerCommand
         continue;
       }
 
-      if (!(opts?.json || isJsonMode())) {
+      if (!(isJsonMode())) {
         const spinner = p.spinner();
         spinner.start(`Testing ${name}...`);
         const result = await testProviderConnection(provider.type, provider.apiKey);
@@ -270,7 +264,7 @@ providerCommand
       }
     }
 
-    if ((opts?.json || isJsonMode())) {
+    if ((isJsonMode())) {
       outputJson(results);
     }
   });
@@ -279,8 +273,7 @@ providerCommand
   .command("set-default")
   .description("Change default provider")
   .argument("[label]", "Provider label")
-  .option("--json", "Output as JSON")
-  .action(async (label?: string, opts?: { json?: boolean }) => {
+  .action(async (label?: string, opts?: { }) => {
     const config = getConfig();
     const labels = Object.keys(config.providers);
 
@@ -307,7 +300,7 @@ providerCommand
     config.defaults.provider = targetLabel;
     updateConfig(config);
 
-    if ((opts?.json || isJsonMode())) {
+    if ((isJsonMode())) {
       outputJson({ status: "success", default: targetLabel });
     } else {
       outputSuccess(`Default provider set to "${targetLabel}".`);

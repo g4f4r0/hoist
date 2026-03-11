@@ -447,7 +447,7 @@ For Rust: \`Cargo.toml\`
 3. For Next.js: set \`HOSTNAME=0.0.0.0\` in ENV
 4. Set the correct \`port\` in \`hoist.json\` to match EXPOSE
 5. Add a health check endpoint (\`/health\` or \`/api/health\`)
-6. Deploy: \`hoist deploy --json --yes\`
+6. Deploy: \`hoist deploy\`
 
 ## Anti-Patterns
 

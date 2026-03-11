@@ -8,7 +8,7 @@ import { exec, execOrFail, closeConnection, type SSHConnectionOptions } from "..
 import { containerName, imageName, buildDockerRunCmd, checkContainerHealth } from "../lib/container.js";
 import { listEnv } from "../lib/container-env.js";
 import { updateRouteUpstream } from "../lib/caddy.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
 
 interface RollbackResult {
   service: string;
@@ -93,11 +93,9 @@ export const rollbackCommand = new Command("rollback")
   .description("Roll back a service to its previous deployment")
   .option("--service <name>", "Service to roll back")
   .option("--server <server>", "Server name filter")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmations")
-  .action(async (opts: { service?: string; server?: string; json?: boolean; yes?: boolean }) => {
-    const json = opts.json || isJsonMode();
-    const yes = opts.yes || isAutoYes();
+  .action(async (opts: { service?: string; server?: string }) => {
+    const json = isJsonMode();
+    const yes = isAutoConfirm();
 
     let config;
     try {

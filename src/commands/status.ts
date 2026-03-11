@@ -89,9 +89,8 @@ async function getDisk(
 
 export const statusCommand = new Command("status")
   .description("Show project status and drift detection")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
     let config;
     try {
       config = loadProjectConfig();

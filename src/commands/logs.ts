@@ -11,13 +11,12 @@ export const logsCommand = new Command("logs")
   .option("--server <server>", "Server name")
   .option("--lines <n>", "Number of lines", "100")
   .option("--follow", "Follow log output")
-  .option("--json", "Output as JSON")
   .action(
     async (
       service: string,
-      opts: { server?: string; lines: string; follow?: boolean; json?: boolean }
+      opts: { server?: string; lines: string; follow?: boolean }
     ) => {
-      const json = opts.json || isJsonMode();
+      const json = isJsonMode();
 
       if (opts.follow && json) {
         outputError("--json is incompatible with --follow");

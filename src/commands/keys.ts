@@ -17,7 +17,7 @@ import {
 } from "../lib/ssh-keys.js";
 import { getProvider, type ServerInfo } from "../providers/index.js";
 import { exec, closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoYes } from "../lib/output.js";
+import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
 
 const { utils } = ssh2;
 
@@ -46,9 +46,8 @@ export const keysCommand = new Command("keys").description(
 keysCommand
   .command("show")
   .description("Show current public key path and fingerprint")
-  .option("--json", "Output as JSON")
-  .action(async (opts: { json?: boolean }) => {
-    const json = json || isJsonMode();
+  .action(async () => {
+    const json = isJsonMode();
     if (!hasKeys()) {
       outputError("No SSH keys found. Run 'hoist init' first.");
       process.exit(1);
@@ -76,11 +75,9 @@ keysCommand
 keysCommand
   .command("rotate")
   .description("Generate a new key pair and update all managed servers")
-  .option("--json", "Output as JSON")
-  .option("--yes", "Skip confirmations")
-  .action(async (opts: { json?: boolean; yes?: boolean }) => {
-    const json = json || isJsonMode();
-    const yes = yes || isAutoYes();
+  .action(async () => {
+    const json = isJsonMode();
+    const yes = isAutoConfirm();
     if (!hasSetup()) {
       outputError("Run 'hoist init' first.");
       process.exit(1);
