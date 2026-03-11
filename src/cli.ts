@@ -6,6 +6,8 @@ import { doctorCommand } from "./commands/doctor.js";
 import { deployCommand } from "./commands/deploy.js";
 import { domainCommand } from "./commands/domain.js";
 import { statusCommand } from "./commands/status.js";
+import { dbCommand } from "./commands/db.js";
+import { templateCommand } from "./commands/template.js";
 
 const program = new Command();
 
@@ -23,5 +25,7 @@ program.addCommand(doctorCommand);
 program.addCommand(deployCommand);
 program.addCommand(domainCommand);
 program.addCommand(statusCommand);
+program.addCommand(dbCommand);
+program.addCommand(templateCommand);
 
 program.parse();

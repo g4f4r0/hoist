@@ -19,7 +19,7 @@ No test framework is configured yet. No ESLint config exists yet (script defined
 
 ## Architecture
 
-**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `domain`, `status`, `doctor`.
+**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `domain`, `status`, `db`, `template`, `doctor`.
 
 **Three layers:**
 
@@ -121,6 +121,7 @@ These tables are guidance for domain operations, not an exhaustive allowlist. St
 - **Server resolution**: hoist.json server names are resolved to IPs via provider API calls. No local IP cache. See `src/lib/server-resolve.ts`.
 - **Zero-downtime deploys**: Build new image → start `-new` container → health check → swap Caddy → stop old → rename. See `src/lib/deploy.ts`.
 - **Caddy config via admin API**: Routes managed by reading/writing Caddy JSON config through `docker exec wget` over SSH. See `src/lib/caddy.ts`.
+- **Template system**: Built-in templates in `src/lib/templates/` define how to run Docker services (image, env, volumes, health check, connection string). `{{generate:password}}` and `{{env:KEY}}` variables resolved at deploy time. Same schema for databases and future app templates.
 - **All provider API helpers** follow the same shape: `api()` returns raw Response, `apiJson<T>()` returns parsed and throws on auth errors.
 - **Server setup is idempotent**: Uses `which X || install X` and `docker inspect X || docker run X` patterns so it can be re-run safely.
 - **Stateless design**: No local database. Server list comes from provider APIs (filtered by hoist tags). Server state comes from SSH. Config is just credentials and defaults.
