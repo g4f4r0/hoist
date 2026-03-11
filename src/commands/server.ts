@@ -6,7 +6,7 @@ import { getConfig, hasConfig } from "../lib/config.js";
 import { readPublicKey, hasKeys, getPrivateKeyPath } from "../lib/ssh-keys.js";
 import { getProvider, type ServerInfo } from "../providers/index.js";
 import { setupServer, checkHealth } from "../lib/server-setup.js";
-import { closeConnection } from "../lib/ssh.js";
+import { exec, execOrFail, closeConnection } from "../lib/ssh.js";
 import { outputJson, outputError, outputSuccess } from "../lib/output.js";
 import { getConfiguredProvider } from "../lib/server-resolve.js";
 
@@ -194,6 +194,151 @@ serverCommand
         outputJson(result);
       } else {
         outputSuccess(`Server "${serverName}" is ready at ${serverInfo.ip}`);
+      }
+    }
+  );
+
+serverCommand
+  .command("import")
+  .description("Import an existing server by IP address")
+  .option("--name <name>", "Server name")
+  .option("--ip <ip>", "Server IP address")
+  .option("--user <user>", "SSH user for initial connection", "root")
+  .option("--json", "Output as JSON")
+  .option("--yes", "Skip confirmations")
+  .action(
+    async (opts: {
+      name?: string;
+      ip?: string;
+      user: string;
+      json?: boolean;
+      yes?: boolean;
+    }) => {
+      if (!hasSetup()) {
+      outputError("Run 'hoist init' first.");
+      process.exit(1);
+    };
+
+      let serverName = opts.name;
+      if (!serverName && !opts.json) {
+        const input = await p.text({
+          message: "Server name:",
+          placeholder: "my-server",
+          validate: (v) => (v.length === 0 ? "Name is required" : undefined),
+        });
+        if (p.isCancel(input)) return;
+        serverName = input;
+      }
+      if (!serverName) {
+        outputError("--name is required");
+        process.exit(1);
+      }
+
+      let ip = opts.ip;
+      if (!ip && !opts.json) {
+        const input = await p.text({
+          message: "Server IP address:",
+          validate: (v) => (v.length === 0 ? "IP is required" : undefined),
+        });
+        if (p.isCancel(input)) return;
+        ip = input;
+      }
+      if (!ip) {
+        outputError("--ip is required");
+        process.exit(1);
+      }
+
+      if (!opts.yes && !opts.json) {
+        const confirmed = await p.confirm({
+          message: `Import server ${chalk.bold(serverName)} at ${chalk.bold(ip)} as user ${chalk.bold(opts.user)}?`,
+        });
+        if (p.isCancel(confirmed) || !confirmed) return;
+      }
+
+      const sshOpts = {
+        host: ip,
+        port: 22,
+        username: opts.user,
+      };
+
+      const spinner = p.spinner();
+
+      if (!opts.json) spinner.start("Testing SSH connection...");
+      try {
+        await exec(sshOpts, "echo ok");
+      } catch (err) {
+        if (!opts.json) spinner.stop(chalk.red("SSH connection failed."));
+        outputError(
+          "Cannot connect to server",
+          err instanceof Error ? err.message : err
+        );
+        process.exit(1);
+      }
+      if (!opts.json) spinner.stop("SSH connection successful.");
+
+      if (!opts.json) spinner.start("Uploading SSH public key...");
+      const publicKey = readPublicKey().replace(/'/g, "'\\''");
+      try {
+        await execOrFail(
+          sshOpts,
+          `mkdir -p ~/.ssh && echo '${publicKey}' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`
+        );
+      } catch (err) {
+        if (!opts.json) spinner.stop(chalk.red("Key upload failed."));
+        outputError(
+          "Failed to upload SSH key",
+          err instanceof Error ? err.message : err
+        );
+        closeConnection(sshOpts);
+        process.exit(1);
+      }
+      if (!opts.json) spinner.stop("SSH public key uploaded.");
+
+      if (!opts.json) spinner.start("Setting up server (Docker, firewall, Caddy)...");
+      closeConnection(sshOpts);
+      const hoistSshOpts = {
+        host: ip,
+        port: 22,
+        username: "root",
+      };
+
+      try {
+        await setupServer(hoistSshOpts, (msg) => {
+          if (!opts.json) spinner.message(msg);
+        });
+      } catch (err) {
+        if (!opts.json) spinner.stop(chalk.yellow("Setup had issues."));
+        outputError(
+          "Server setup warning",
+          err instanceof Error ? err.message : err
+        );
+      }
+
+      try {
+        const health = await checkHealth(hoistSshOpts);
+        if (!opts.json)
+          spinner.stop(
+            health.healthy
+              ? chalk.green("Server ready.")
+              : chalk.yellow("Server imported but some checks failed.")
+          );
+      } catch {
+        if (!opts.json) spinner.stop("Server imported.");
+      }
+
+      closeConnection(hoistSshOpts);
+
+      const result = {
+        server: serverName,
+        provider: "imported",
+        ip,
+        status: "ready",
+      };
+
+      if (opts.json) {
+        outputJson(result);
+      } else {
+        outputSuccess(`Server "${serverName}" imported and ready at ${ip}`);
       }
     }
   );

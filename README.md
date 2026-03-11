@@ -218,17 +218,20 @@ Everything on the server runs in Docker. Containers communicate over an internal
 
 ```bash
 hoist init                    # Global setup + provider config
-hoist provider add|list|delete|test|set-default  # Manage cloud providers
-hoist server create|list|destroy|ssh|status      # Provision and manage VPS
+hoist provider add|list|update|delete|test|set-default  # Manage cloud providers
+hoist server create|import|list|destroy|ssh|status      # Provision and manage VPS
 hoist deploy                  # Deploy from Dockerfile
 hoist rollback                # Rollback to previous version
-hoist template list|info|create|destroy|services|inspect|start|stop|restart  # Service templates
+hoist template list|info|create|destroy|backup|services|inspect|start|stop|restart  # Service templates
 hoist domain add|list|delete  # Custom domains + auto-SSL
 hoist env set|get|list|delete|import|export  # Environment variables
 hoist logs <service>          # Container logs
 hoist status                  # Full project overview
 hoist doctor                  # Health check everything
-hoist update                  # Regenerate agent config files
+hoist keys show|rotate        # SSH key management
+hoist config validate         # Validate hoist.json
+hoist sync                    # Regenerate agent config files
+hoist update                  # Update hoist-cli to latest version
 ```
 
 All commands support `--json` and `--yes`.
@@ -245,7 +248,7 @@ Hoist auto-generates configuration files so any AI agent understands your infras
 | Codex | `.agents/skills/hoist/SKILL.md` |
 | Cursor, Windsurf, Copilot, Gemini | `AGENTS.md` |
 
-Run `hoist init` or `hoist update` to generate these files.
+Run `hoist init` or `hoist sync` to generate these files.
 
 ---
 

@@ -166,6 +166,67 @@ providerCommand
   });
 
 providerCommand
+  .command("update")
+  .description("Update API key for a provider")
+  .argument("[label]", "Provider label to update")
+  .option("--json", "Output as JSON")
+  .action(async (label?: string, opts?: { json?: boolean }) => {
+    const config = getConfig();
+    const labels = Object.keys(config.providers);
+
+    if (labels.length === 0) {
+      outputError("No providers configured.");
+      process.exit(1);
+    }
+
+    let targetLabel = label;
+    if (!targetLabel) {
+      const selected = await p.select({
+        message: "Update which provider?",
+        options: labels.map((name) => ({ value: name, label: name })),
+      });
+      if (p.isCancel(selected)) return;
+      targetLabel = selected;
+    }
+
+    if (!config.providers[targetLabel]) {
+      outputError(`Provider "${targetLabel}" not found.`);
+      process.exit(1);
+    }
+
+    const apiKey = await p.password({
+      message: "New API key:",
+    });
+    if (p.isCancel(apiKey)) return;
+
+    const spinner = p.spinner();
+    spinner.start(`Verifying ${targetLabel}...`);
+
+    const result = await testProviderConnection(
+      config.providers[targetLabel].type,
+      apiKey
+    );
+
+    if (result.ok) {
+      spinner.stop(`${targetLabel} verified (${result.message})`);
+      config.providers[targetLabel].apiKey = apiKey;
+      updateConfig(config);
+
+      if (opts?.json) {
+        outputJson({ status: "updated", provider: targetLabel });
+      } else {
+        outputSuccess(`Provider "${targetLabel}" API key updated.`);
+      }
+    } else {
+      spinner.stop(chalk.red(`Verification failed: ${result.message}`));
+      if (opts?.json) {
+        outputError("Verification failed", result.message);
+      }
+      process.exit(1);
+    }
+  });
+
+providerCommand
   .command("test")
   .description("Verify provider API keys work")
   .argument("[label]", "Provider label to test")
