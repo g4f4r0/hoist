@@ -19,11 +19,20 @@ export function getConfiguredProvider(providerLabel?: string): {
   return { label, providerConfig, provider: getProvider(providerConfig.type) };
 }
 
-/** Looks up a server by name via the provider API and returns its connection details. */
+/** Looks up a server by name via the provider API or imported servers config. */
 export async function resolveServer(
   serverName: string,
   serverConfig: { provider: string }
 ): Promise<{ ip: string; id: string; provider: string }> {
+  if (serverConfig.provider === "imported") {
+    const config = getConfig();
+    const imported = config.importedServers?.[serverName];
+    if (imported) {
+      return { ip: imported.ip, id: serverName, provider: "imported" };
+    }
+    throw new Error(`Imported server "${serverName}" not found in config.`);
+  }
+
   const { providerConfig, provider } = getConfiguredProvider(
     serverConfig.provider
   );

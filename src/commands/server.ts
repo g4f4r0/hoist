@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
-import { getConfig, hasConfig } from "../lib/config.js";
+import { getConfig, updateConfig, hasConfig } from "../lib/config.js";
 import { readPublicKey, hasKeys, getPrivateKeyPath } from "../lib/ssh-keys.js";
 import { getProvider, type ServerInfo } from "../providers/index.js";
 import { setupServer, checkHealth } from "../lib/server-setup.js";
@@ -328,6 +328,11 @@ serverCommand
 
       closeConnection(hoistSshOpts);
 
+      const config = getConfig();
+      if (!config.importedServers) config.importedServers = {};
+      config.importedServers[serverName] = { ip, user: "root" };
+      updateConfig(config);
+
       const result = {
         server: serverName,
         provider: "imported",
@@ -379,6 +384,21 @@ serverCommand
             `Failed to list servers from ${name}: ${err instanceof Error ? err.message : err}`
           );
         }
+      }
+    }
+
+    if (!opts.provider && config.importedServers) {
+      for (const [name, imported] of Object.entries(config.importedServers)) {
+        allServers.push({
+          id: name,
+          name,
+          status: "imported",
+          ip: imported.ip,
+          type: "",
+          region: "",
+          monthlyCost: "",
+          provider: "imported",
+        });
       }
     }
 
@@ -435,6 +455,20 @@ serverCommand
           found = { ...match, provider: providerName };
           break;
         }
+      }
+
+      if (!found && config.importedServers?.[name]) {
+        const imported = config.importedServers[name];
+        found = {
+          id: name,
+          name,
+          status: "imported",
+          ip: imported.ip,
+          type: "",
+          region: "",
+          monthlyCost: "",
+          provider: "imported",
+        };
       }
 
       if (!found) {
@@ -521,6 +555,23 @@ serverCommand
         }
       }
 
+      if (!found && config.importedServers?.[name]) {
+        if (!opts.yes && !opts.json) {
+          const confirmed = await p.confirm({
+            message: `Remove imported server "${name}" from config?`,
+          });
+          if (p.isCancel(confirmed) || !confirmed) return;
+        }
+        delete config.importedServers[name];
+        updateConfig(config);
+        if (opts.json) {
+          outputJson({ status: "removed", server: name });
+        } else {
+          outputSuccess(`Imported server "${name}" removed from config.`);
+        }
+        return;
+      }
+
       if (!found) {
         outputError(`Server "${name}" not found.`);
         process.exit(1);
@@ -575,15 +626,19 @@ serverCommand
       : Object.keys(config.providers);
 
     let ip = "";
-    for (const providerName of labels) {
-      const providerConfig = config.providers[providerName];
-      if (!providerConfig) continue;
-      const provider = getProvider(providerConfig.type);
-      const servers = await provider.listServers(providerConfig.apiKey);
-      const match = servers.find((s) => s.name === name);
-      if (match?.ip) {
-        ip = match.ip;
-        break;
+    if (config.importedServers?.[name]) {
+      ip = config.importedServers[name].ip;
+    } else {
+      for (const providerName of labels) {
+        const providerConfig = config.providers[providerName];
+        if (!providerConfig) continue;
+        const provider = getProvider(providerConfig.type);
+        const servers = await provider.listServers(providerConfig.apiKey);
+        const match = servers.find((s) => s.name === name);
+        if (match?.ip) {
+          ip = match.ip;
+          break;
+        }
       }
     }
 

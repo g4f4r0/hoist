@@ -7,11 +7,17 @@ export interface ProviderConfig {
   apiKey: string;
 }
 
+export interface ImportedServer {
+  ip: string;
+  user: string;
+}
+
 export interface HoistConfig {
   providers: Record<string, ProviderConfig>;
   defaults: {
     provider?: string;
   };
+  importedServers?: Record<string, ImportedServer>;
 }
 
 const HOIST_DIR = path.join(os.homedir(), ".hoist");
