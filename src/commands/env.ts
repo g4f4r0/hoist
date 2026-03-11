@@ -164,10 +164,10 @@ envCommand
   );
 
 envCommand
-  .command("remove")
-  .description("Remove an environment variable from a service")
+  .command("delete")
+  .description("Delete an environment variable from a service")
   .argument("<service>", "Service name")
-  .argument("<key>", "Environment variable key to remove")
+  .argument("<key>", "Environment variable key to delete")
   .requiredOption("--server <server>", "Server name")
   .option("--json", "Output as JSON")
   .action(
@@ -193,20 +193,20 @@ envCommand
         delete current[key];
 
         const spinner = p.spinner();
-        if (!opts.json) spinner.start(`Removing "${key}" from "${service}"...`);
+        if (!opts.json) spinner.start(`Deleting "${key}" from "${service}"...`);
 
         await recreateWithEnv(ssh, service, current);
 
-        if (!opts.json) spinner.stop(chalk.green(`Removed "${key}" from "${service}".`));
+        if (!opts.json) spinner.stop(chalk.green(`Deleted "${key}" from "${service}".`));
 
         if (opts.json) {
-          outputJson({ service, server: opts.server, removed: key });
+          outputJson({ service, server: opts.server, deleted: key });
         } else {
-          outputSuccess(`Removed ${key} from ${service}`);
+          outputSuccess(`Deleted ${key} from ${service}`);
         }
       } catch (err) {
         outputError(
-          "Failed to remove environment variable",
+          "Failed to delete environment variable",
           err instanceof Error ? err.message : err
         );
         process.exit(1);

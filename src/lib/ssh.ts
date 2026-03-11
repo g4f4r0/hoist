@@ -188,7 +188,7 @@ export async function execOrFail(
   return { stdout: result.stdout, stderr: result.stderr };
 }
 
-/** Closes and removes a specific connection from the pool. */
+/** Closes a specific connection and deletes it from the pool. */
 export function closeConnection(opts: SSHConnectionOptions): void {
   const key = poolKey(opts);
   const cached = pool.get(key);
@@ -198,7 +198,7 @@ export function closeConnection(opts: SSHConnectionOptions): void {
   }
 }
 
-/** Closes and removes all connections from the pool. */
+/** Closes all connections and clears the pool. */
 export function closeAll(): void {
   for (const [key, { client }] of pool) {
     client.end();

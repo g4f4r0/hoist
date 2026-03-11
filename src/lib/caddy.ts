@@ -114,8 +114,8 @@ export async function addRoute(
   await putConfig(ssh, config);
 }
 
-/** Removes a reverse proxy route by domain. */
-export async function removeRoute(
+/** Deletes a reverse proxy route by domain. */
+export async function deleteRoute(
   ssh: SSHConnectionOptions,
   domain: string
 ): Promise<void> {

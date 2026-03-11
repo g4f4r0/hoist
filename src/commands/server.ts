@@ -343,7 +343,7 @@ serverCommand
 
 serverCommand
   .command("destroy")
-  .description("Remove a server")
+  .description("Delete a server")
   .argument("<name>", "Server name")
   .option("--provider <provider>", "Provider label")
   .option("--yes", "Skip confirmation")
@@ -395,7 +395,7 @@ serverCommand
       if (!opts.json) spinner.start(`Destroying ${name}...`);
 
       try {
-        await provider.removeServer(providerConfig.apiKey, found.id);
+        await provider.deleteServer(providerConfig.apiKey, found.id);
         if (!opts.json) spinner.stop(`Server "${name}" destroyed.`);
         if (opts.json) {
           outputJson({ status: "destroyed", server: name });

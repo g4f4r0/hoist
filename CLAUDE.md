@@ -70,7 +70,7 @@ Do not create `utils/`, `helpers/`, or `common/` folders. If something is shared
 | Read many | `list` |
 | Create | `create` |
 | Update | `update` |
-| Delete | `remove` |
+| Delete | `delete` |
 
 One `get` per domain with optional lookup fields instead of `getByPhone`, `getByEmail`, etc.
 One `update` per domain with `id` plus optional partial fields.

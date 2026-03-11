@@ -232,7 +232,7 @@ export const hetznerProvider: Provider = {
     return formatServer(data.server);
   },
 
-  async removeServer(apiKey: string, id: string): Promise<void> {
+  async deleteServer(apiKey: string, id: string): Promise<void> {
     await apiJson<unknown>(`/servers/${id}`, apiKey, { method: "DELETE" });
   },
 };

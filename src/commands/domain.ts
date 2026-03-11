@@ -3,7 +3,7 @@ import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { loadProjectConfig, isAppService } from "../lib/project-config.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
-import { addRoute, removeRoute, listRoutes } from "../lib/caddy.js";
+import { addRoute, deleteRoute, listRoutes } from "../lib/caddy.js";
 import { closeConnection } from "../lib/ssh.js";
 import { outputJson, outputError, outputSuccess } from "../lib/output.js";
 
@@ -141,8 +141,8 @@ domainCommand
   });
 
 domainCommand
-  .command("remove")
-  .description("Remove a domain route")
+  .command("delete")
+  .description("Delete a domain route")
   .argument("<domain>", "Domain name")
   .option("--json", "Output as JSON")
   .option("--yes", "Skip confirmation")
@@ -193,16 +193,16 @@ domainCommand
 
       if (!opts.yes && !opts.json) {
         const confirmed = await p.confirm({
-          message: `Remove route for "${domain}" from ${targetServer}?`,
+          message: `Delete route for "${domain}" from ${targetServer}?`,
         });
         if (p.isCancel(confirmed) || !confirmed) return;
       }
 
       const ssh = { host: targetIp, port: 22, username: "root" };
       try {
-        await removeRoute(ssh, domain);
+        await deleteRoute(ssh, domain);
       } catch (err) {
-        outputError(err instanceof Error ? err.message : "Failed to remove route");
+        outputError(err instanceof Error ? err.message : "Failed to delete route");
         closeConnection(ssh);
         process.exit(1);
       }
@@ -210,9 +210,9 @@ domainCommand
       closeConnection(ssh);
 
       if (opts.json) {
-        outputJson({ status: "removed", domain, server: targetServer });
+        outputJson({ status: "deleted", domain, server: targetServer });
       } else {
-        outputSuccess(`Route for "${domain}" removed from ${targetServer}`);
+        outputSuccess(`Route for "${domain}" deleted from ${targetServer}`);
       }
     }
   );

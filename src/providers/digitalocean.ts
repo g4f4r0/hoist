@@ -231,7 +231,7 @@ export const digitaloceanProvider: Provider = {
     };
   },
 
-  async removeServer(apiKey: string, id: string): Promise<void> {
+  async deleteServer(apiKey: string, id: string): Promise<void> {
     await api(`/droplets/${id}`, apiKey, { method: "DELETE" });
   },
 };

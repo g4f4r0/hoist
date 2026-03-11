@@ -49,7 +49,7 @@ export interface Provider {
   ): Promise<ServerInfo>;
   listServers(apiKey: string): Promise<ServerInfo[]>;
   getServer(apiKey: string, id: string): Promise<ServerInfo>;
-  removeServer(apiKey: string, id: string): Promise<void>;
+  deleteServer(apiKey: string, id: string): Promise<void>;
 }
 
 const providers: Record<ProviderConfig["type"], Provider> = {

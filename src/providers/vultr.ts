@@ -215,7 +215,7 @@ export const vultrProvider: Provider = {
     };
   },
 
-  async removeServer(apiKey: string, id: string): Promise<void> {
+  async deleteServer(apiKey: string, id: string): Promise<void> {
     await api(`/instances/${id}`, apiKey, { method: "DELETE" });
   },
 };

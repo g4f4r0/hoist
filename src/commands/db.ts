@@ -2,7 +2,7 @@ import { Command } from "commander";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 
-import { createDatabase, listDatabases, removeDatabase, getDatabaseInfo, controlDatabase } from "../lib/database.js";
+import { createDatabase, listDatabases, deleteDatabase, getDatabaseInfo, controlDatabase } from "../lib/database.js";
 import { listTemplates } from "../lib/templates/index.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
 import { loadProjectConfig } from "../lib/project-config.js";
@@ -300,16 +300,16 @@ dbCommand
 
 dbCommand
   .command("destroy")
-  .description("Remove a database")
+  .description("Destroy a database")
   .argument("<name>", "Database name")
   .requiredOption("--server <server>", "Server name")
   .option("--yes", "Skip confirmation")
   .option("--json", "Output as JSON")
-  .option("--remove-volumes", "Also remove data volumes")
+  .option("--delete-volumes", "Also delete data volumes")
   .action(
     async (
       name: string,
-      opts: { server: string; yes?: boolean; json?: boolean; removeVolumes?: boolean }
+      opts: { server: string; yes?: boolean; json?: boolean; deleteVolumes?: boolean }
     ) => {
       if (!opts.yes && !opts.json) {
         const confirmed = await p.confirm({
@@ -350,7 +350,7 @@ dbCommand
       if (!opts.json) spinner.start(`Destroying database "${name}"...`);
 
       try {
-        await removeDatabase(ssh, name, opts.removeVolumes);
+        await deleteDatabase(ssh, name, opts.deleteVolumes);
         if (!opts.json) spinner.stop(`Database "${name}" destroyed.`);
         if (opts.json) {
           outputJson({ status: "destroyed", database: name, server: opts.server });

@@ -143,11 +143,11 @@ export async function listDatabases(
     });
 }
 
-/** Removes a database container and optionally its volumes. */
-export async function removeDatabase(
+/** Deletes a database container and optionally its volumes. */
+export async function deleteDatabase(
   ssh: SSHConnectionOptions,
   serviceName: string,
-  removeVolumes?: boolean
+  deleteVolumes?: boolean
 ): Promise<void> {
   const container = containerName(serviceName);
 
@@ -162,7 +162,7 @@ export async function removeDatabase(
   await exec(ssh, `docker stop ${container}`);
   await execOrFail(ssh, `docker rm ${container}`);
 
-  if (removeVolumes) {
+  if (deleteVolumes) {
     const volumes = await exec(
       ssh,
       `docker volume ls --filter name=hoist-${serviceName}- --format '{{.Name}}'`

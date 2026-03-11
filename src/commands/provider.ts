@@ -119,9 +119,9 @@ providerCommand
   });
 
 providerCommand
-  .command("remove")
-  .description("Remove a provider")
-  .argument("[label]", "Provider label to remove")
+  .command("delete")
+  .description("Delete a provider")
+  .argument("[label]", "Provider label to delete")
   .option("--json", "Output as JSON")
   .action(async (label?: string, opts?: { json?: boolean }) => {
     const config = getConfig();
@@ -135,7 +135,7 @@ providerCommand
     let targetLabel = label;
     if (!targetLabel) {
       const selected = await p.select({
-        message: "Remove which provider?",
+        message: "Delete which provider?",
         options: labels.map((name) => ({ value: name, label: name })),
       });
       if (p.isCancel(selected)) return;
@@ -148,7 +148,7 @@ providerCommand
     }
 
     const confirmed = await p.confirm({
-      message: `Remove provider "${targetLabel}"?`,
+      message: `Delete provider "${targetLabel}"?`,
     });
     if (p.isCancel(confirmed) || !confirmed) return;
 
@@ -159,9 +159,9 @@ providerCommand
     updateConfig(config);
 
     if (opts?.json) {
-      outputJson({ status: "removed", provider: targetLabel });
+      outputJson({ status: "deleted", provider: targetLabel });
     } else {
-      outputSuccess(`Provider "${targetLabel}" removed.`);
+      outputSuccess(`Provider "${targetLabel}" deleted.`);
     }
   });
 
