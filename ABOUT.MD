@@ -113,7 +113,7 @@ Internally, every provider implements the same interface: create server, list se
 ```
 hoist provider add            # Interactive setup
 hoist provider list           # Show all configured providers
-hoist provider remove         # Remove a provider
+hoist provider delete         # Delete a provider
 hoist provider test           # Verify API keys work
 hoist provider set-default    # Change default
 ```
@@ -787,13 +787,13 @@ ClawHub skill + MCP integration for OpenClaw users. Includes scheduled health ch
 
 ```
 hoist init                              # Global setup
-hoist provider add/list/remove/test     # Manage cloud providers
+hoist provider add/list/delete/test     # Manage cloud providers
 
 hoist server create                     # Provision VPS
 hoist server list                       # List all servers
 hoist server status <name>              # Server details
 hoist server resize <name>              # Vertical scaling
-hoist server destroy <name>             # Remove server
+hoist server destroy <name>             # Destroy server
 hoist server ssh <name>                 # Open SSH session
 
 hoist deploy                            # Deploy from hoist.json
@@ -805,17 +805,17 @@ hoist db create                         # Create database
 hoist db list                           # List databases
 hoist db backup <name>                  # Manual backup
 hoist db restore <name> <backup>        # Restore from backup
-hoist db destroy <name>                 # Remove database
+hoist db destroy <name>                 # Destroy database
 
 hoist domain add <domain> --service <s> # Add domain
 hoist domain list                       # List all domains
-hoist domain remove <domain>            # Remove domain
+hoist domain delete <domain>            # Delete domain
 hoist domain verify <domain>            # Check DNS
 
 hoist env set <service> KEY=value       # Set env var
 hoist env get <service> KEY             # Get env var
 hoist env list <service>                # List env vars (masked)
-hoist env remove <service> KEY          # Remove env var
+hoist env delete <service> KEY          # Delete env var
 hoist env import <service> <file>       # Bulk import
 hoist env export <service>              # Bulk export
 
