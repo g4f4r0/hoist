@@ -1,0 +1,44 @@
+{
+  "name": "hoist",
+  "version": "0.1.0",
+  "description": "Hoist your apps to production. Let your AI agent handle the rest.",
+  "type": "module",
+  "bin": {
+    "hoist": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/cli.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "deploy",
+    "vps",
+    "docker",
+    "cli",
+    "hetzner",
+    "vultr",
+    "digitalocean",
+    "ai",
+    "agent",
+    "infrastructure"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.10.0",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/ssh2": "^1.15.4",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2"
+  }
+}
