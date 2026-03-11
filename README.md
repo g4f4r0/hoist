@@ -9,8 +9,8 @@
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
-  <a href="https://www.npmjs.com/package/@hoist/cli"><img src="https://img.shields.io/npm/v/@hoist/cli.svg" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@hoist/cli"><img src="https://img.shields.io/npm/dm/@hoist/cli.svg" alt="npm downloads" /></a>
+  <a href="https://www.npmjs.com/package/hoist-cli"><img src="https://img.shields.io/npm/v/hoist-cli.svg" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/hoist-cli"><img src="https://img.shields.io/npm/dm/hoist-cli.svg" alt="npm downloads" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg" alt="Node.js" /></a>
 </p>
 
@@ -38,7 +38,7 @@ Most deployment tools give you a dashboard. Hoist gives your AI agent a CLI.
 Hoist is an open-source CLI that turns any AI coding agent into an infrastructure expert. It works with Claude Code, Codex, Cursor, Windsurf, Copilot, and any agent that can run shell commands.
 
 ```
-npm install -g @hoist/cli
+npm install -g hoist-cli
 ```
 
 ---
@@ -47,7 +47,7 @@ npm install -g @hoist/cli
 
 ```bash
 # 1. Install and configure a cloud provider
-npm install -g @hoist/cli
+npm install -g hoist-cli
 hoist init
 
 # 2. Create a server (~60 seconds)

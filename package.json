@@ -1,5 +1,5 @@
 {
-  "name": "@hoist/cli",
+  "name": "hoist-cli",
   "version": "0.1.0",
   "description": "Hoist your apps to production. Let your AI agent handle the rest.",
   "type": "module",
