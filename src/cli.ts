@@ -8,6 +8,8 @@ import { domainCommand } from "./commands/domain.js";
 import { statusCommand } from "./commands/status.js";
 import { dbCommand } from "./commands/db.js";
 import { templateCommand } from "./commands/template.js";
+import { envCommand } from "./commands/env.js";
+import { logsCommand } from "./commands/logs.js";
 
 const program = new Command();
 
@@ -27,5 +29,7 @@ program.addCommand(domainCommand);
 program.addCommand(statusCommand);
 program.addCommand(dbCommand);
 program.addCommand(templateCommand);
+program.addCommand(envCommand);
+program.addCommand(logsCommand);
 
 program.parse();
