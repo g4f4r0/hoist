@@ -8,22 +8,10 @@ import { getProvider, type ServerInfo } from "../providers/index.js";
 import { setupServer, checkHealth } from "../lib/server-setup.js";
 import { closeConnection } from "../lib/ssh.js";
 import { outputJson, outputError, outputSuccess } from "../lib/output.js";
+import { getConfiguredProvider } from "../lib/server-resolve.js";
 
 function hasSetup(): boolean {
   return hasConfig() && hasKeys();
-}
-
-function getConfiguredProvider(providerLabel?: string) {
-  const config = getConfig();
-  const label = providerLabel ?? config.defaults.provider;
-  if (!label) {
-    throw new Error("No provider specified and no default set.");
-  }
-  const providerConfig = config.providers[label];
-  if (!providerConfig) {
-    throw new Error(`Provider "${label}" not found in config.`);
-  }
-  return { label, providerConfig, provider: getProvider(providerConfig.type) };
 }
 
 export const serverCommand = new Command("server").description(

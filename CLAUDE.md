@@ -19,7 +19,7 @@ No test framework is configured yet. No ESLint config exists yet (script defined
 
 ## Architecture
 
-**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `doctor`.
+**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `domain`, `status`, `doctor`.
 
 **Three layers:**
 
@@ -117,10 +117,23 @@ These tables are guidance for domain operations, not an exhaustive allowlist. St
 
 ## Key Patterns
 
+- **hoist.json is read-only input**: CLI reads and validates it, never writes it. The agent creates/updates hoist.json. Types and loader in `src/lib/project-config.ts`.
+- **Server resolution**: hoist.json server names are resolved to IPs via provider API calls. No local IP cache. See `src/lib/server-resolve.ts`.
+- **Zero-downtime deploys**: Build new image → start `-new` container → health check → swap Caddy → stop old → rename. See `src/lib/deploy.ts`.
+- **Caddy config via admin API**: Routes managed by reading/writing Caddy JSON config through `docker exec wget` over SSH. See `src/lib/caddy.ts`.
 - **All provider API helpers** follow the same shape: `api()` returns raw Response, `apiJson<T>()` returns parsed and throws on auth errors.
 - **Server setup is idempotent**: Uses `which X || install X` and `docker inspect X || docker run X` patterns so it can be re-run safely.
 - **Stateless design**: No local database. Server list comes from provider APIs (filtered by hoist tags). Server state comes from SSH. Config is just credentials and defaults.
 - **Dual-mode output**: `--json` sends structured JSON to stdout. Human output goes to stderr via chalk. Every command supports both.
+
+## QA Feedback Loops
+
+After completing a phase or significant batch of changes, run feedback loops to verify all files comply with these conventions. Deploy parallel review agents across all changed files. Each loop checks: naming, JSDoc, types, imports, error handling, return types, inline comments, casing.
+
+- Fix all violations found, then re-run
+- Continue until **3 consecutive clean loops** with zero violations
+- Dismiss false positives only when the agent misreads a rule (document the reasoning)
+- Common catches: split imports from same module, section-header comments, unused params, inline comments on self-evident code
 
 ## Commits
 
