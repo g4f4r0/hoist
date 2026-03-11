@@ -62,6 +62,18 @@ export async function resolveServers(
 
   const tasks = [...byProvider.entries()].map(
     async ([providerLabel, names]) => {
+      if (providerLabel === "imported") {
+        const config = getConfig();
+        for (const name of names) {
+          const imported = config.importedServers?.[name];
+          if (!imported) {
+            throw new Error(`Imported server "${name}" not found in config.`);
+          }
+          result[name] = { ip: imported.ip, id: name, provider: "imported" };
+        }
+        return;
+      }
+
       const { providerConfig, provider } =
         getConfiguredProvider(providerLabel);
       const serverList = await provider.listServers(providerConfig.apiKey);
