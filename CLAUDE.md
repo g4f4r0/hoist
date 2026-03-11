@@ -19,7 +19,7 @@ No test framework is configured yet. No ESLint config exists yet (script defined
 
 ## Architecture
 
-**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `rollback`, `domain`, `status`, `db`, `template`, `env`, `logs`, `doctor`.
+**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `rollback`, `domain`, `status`, `db`, `template`, `env`, `logs`, `doctor`, `update`.
 
 **Three layers:**
 

@@ -12,6 +12,7 @@ import { templateCommand } from "./commands/template.js";
 import { envCommand } from "./commands/env.js";
 import { logsCommand } from "./commands/logs.js";
 import { rollbackCommand } from "./commands/rollback.js";
+import { updateCommand } from "./commands/update.js";
 import { closeAll } from "./lib/ssh.js";
 
 const program = new Command();
@@ -35,6 +36,7 @@ program.addCommand(templateCommand);
 program.addCommand(envCommand);
 program.addCommand(logsCommand);
 program.addCommand(rollbackCommand);
+program.addCommand(updateCommand);
 
 process.on("SIGINT", () => {
   closeAll();

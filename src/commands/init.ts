@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+
 import {
   hasConfig,
   ensureHoistDir,
@@ -11,6 +12,7 @@ import {
 } from "../lib/config.js";
 import { generateKeys, hasKeys } from "../lib/ssh-keys.js";
 import { testProviderConnection } from "../providers/index.js";
+import { writeAgentConfig } from "../lib/agent-config.js";
 
 const PROVIDER_TYPES = [
   { value: "hetzner", label: "Hetzner" },
@@ -107,10 +109,13 @@ export const initCommand = new Command("init")
 
     updateConfig(config);
 
+    const written = writeAgentConfig(process.cwd());
+    p.log.success(`Agent config written: ${written.join(", ")}`);
+
     const providerCount = Object.keys(config.providers).length;
     p.outro(
       providerCount > 0
-        ? `Hoist is ready with ${providerCount} provider${providerCount > 1 ? "s" : ""}. Tell your AI agent to read the Hoist skill file.`
+        ? `Hoist is ready with ${providerCount} provider${providerCount > 1 ? "s" : ""}.`
         : "Hoist is ready. Add a provider with: hoist provider add"
     );
   });
