@@ -20,11 +20,12 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Builds a docker run command string with env vars and standard flags. */
+/** Builds a docker run command string with env vars, volumes, and standard flags. */
 export function buildDockerRunCmd(
   name: string,
   image: string,
-  env: Record<string, string>
+  env: Record<string, string>,
+  volumes?: Record<string, string>
 ): string {
   const parts = [
     "docker run -d",
@@ -32,6 +33,12 @@ export function buildDockerRunCmd(
     "--network hoist",
     "--restart unless-stopped",
   ];
+
+  if (volumes) {
+    for (const [vol, mount] of Object.entries(volumes)) {
+      parts.push(`-v ${vol}:${mount}`);
+    }
+  }
 
   for (const [key, value] of Object.entries(env)) {
     const escaped = value.replace(/'/g, "'\\''");
@@ -47,7 +54,7 @@ export function buildDockerRunCmd(
 export async function checkContainerHealth(
   ssh: SSHConnectionOptions,
   container: string,
-  port: number,
+  port?: number,
   healthCheck?: HealthCheckConfig
 ): Promise<void> {
   if (!healthCheck) {

@@ -24,9 +24,10 @@ export interface AppServiceConfig {
   type: "app";
   source: string;
   dockerfile?: string;
-  port: number;
+  port?: number;
   domain?: string;
   env_file?: string;
+  volumes?: Record<string, string>;
   autodeploy?: AutodeployConfig;
   healthCheck?: HealthCheckConfig;
 }
@@ -142,15 +143,37 @@ function validateService(raw: unknown, name: string, serverNames: string[]): Ser
   const type = requireString(raw, "type", ctx);
 
   if (type === "app") {
+    const port = optionalNumber(raw, "port", ctx);
+    const domain = optionalString(raw, "domain", ctx);
+
+    if (domain && port === undefined) {
+      throw new Error(`${ctx}: "port" is required when "domain" is set`);
+    }
+    if (raw.healthCheck !== undefined && port === undefined) {
+      throw new Error(`${ctx}: "port" is required when "healthCheck" is set`);
+    }
+
     const service: AppServiceConfig = {
       server,
       type: "app",
       source: requireString(raw, "source", ctx),
       dockerfile: optionalString(raw, "dockerfile", ctx),
-      port: requireNumber(raw, "port", ctx),
-      domain: optionalString(raw, "domain", ctx),
+      port,
+      domain,
       env_file: optionalString(raw, "env_file", ctx),
     };
+
+    if (isRecord(raw.volumes)) {
+      const volumes: Record<string, string> = {};
+      for (const [vol, mount] of Object.entries(raw.volumes)) {
+        if (typeof mount !== "string" || mount.length === 0) {
+          throw new Error(`${ctx}: volume "${vol}" mount path must be a non-empty string`);
+        }
+        volumes[vol] = mount;
+      }
+      service.volumes = volumes;
+    }
+
     if (raw.autodeploy !== undefined) {
       service.autodeploy = validateAutodeploy(raw.autodeploy, ctx);
     }

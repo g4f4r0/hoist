@@ -51,10 +51,11 @@ async function isFirstDeploy(
 function buildRunCmd(
   serviceName: string,
   env: Record<string, string>,
+  volumes?: Record<string, string>,
   container?: string
 ): string {
   const name = container ?? containerName(serviceName);
-  return buildDockerRunCmd(name, `${imageName(serviceName)}:latest`, env);
+  return buildDockerRunCmd(name, `${imageName(serviceName)}:latest`, env, volumes);
 }
 
 /** Parses a .env file into key-value pairs, skipping comments and empty lines. */
@@ -125,13 +126,13 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
   try {
     if (firstDeploy) {
       log("First deploy — starting container");
-      const runCmd = buildRunCmd(serviceName, env);
+      const runCmd = buildRunCmd(serviceName, env, service.volumes);
       await execOrFail(ssh, runCmd);
 
       log("Checking container health");
       await checkContainerHealth(ssh, name, service.port, service.healthCheck);
 
-      if (service.domain) {
+      if (service.domain && service.port) {
         log(`Configuring route: ${service.domain} → ${name}:${service.port}`);
         await addRoute(ssh, service.domain, `${name}:${service.port}`);
       }
@@ -142,13 +143,13 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
       await exec(ssh, `docker rm -f ${newContainer} 2>/dev/null`);
 
       log(`Starting new container: ${newContainer}`);
-      const runCmd = buildRunCmd(serviceName, env, newContainer);
+      const runCmd = buildRunCmd(serviceName, env, service.volumes, newContainer);
       await execOrFail(ssh, runCmd);
 
       log("Checking new container health");
       await checkContainerHealth(ssh, newContainer, service.port, service.healthCheck);
 
-      if (service.domain) {
+      if (service.domain && service.port) {
         log(`Swapping Caddy route to ${newContainer}:${service.port}`);
         await updateRouteUpstream(ssh, service.domain, `${newContainer}:${service.port}`);
       }
@@ -160,7 +161,7 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
       log("Renaming new container to live");
       await execOrFail(ssh, `docker rename ${newContainer} ${name}`);
 
-      if (service.domain) {
+      if (service.domain && service.port) {
         log(`Updating Caddy route to final name: ${name}:${service.port}`);
         await updateRouteUpstream(ssh, service.domain, `${name}:${service.port}`);
       }
@@ -178,7 +179,7 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
   );
   const running = status.code === 0 && status.stdout.trim() === "running";
 
-  const url = service.domain ? `https://${service.domain}` : `http://${ssh.host}:${service.port}`;
+  const url = service.domain ? `https://${service.domain}` : service.port ? `http://${ssh.host}:${service.port}` : `ssh://${ssh.host}`;
 
   return {
     service: serviceName,
