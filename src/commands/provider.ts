@@ -1,88 +1,88 @@
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
+
 import {
   getConfig,
   updateConfig,
   hasConfig,
   type ProviderConfig,
 } from "../lib/config.js";
-import { testProviderConnection } from "../providers/index.js";
-import { outputJson, outputSuccess, outputError, isJsonMode, isAutoConfirm } from "../lib/output.js";
-
-const PROVIDER_TYPES = [
-  { value: "hetzner", label: "Hetzner" },
-  { value: "vultr", label: "Vultr" },
-  { value: "digitalocean", label: "DigitalOcean" },
-] as const;
+import { testProviderConnection, PROVIDER_TYPES } from "../providers/index.js";
+import { outputResult, outputError, outputProgress } from "../lib/output.js";
+import { generateRandomName } from "../lib/random-name.js";
 
 export const providerCommand = new Command("provider").description(
   "Manage cloud providers"
 );
 
+const validTypes = PROVIDER_TYPES.map((p) => p.value) as readonly string[];
+
+const ENV_VAR_MAP: Record<string, string> = {
+  hetzner: "HOIST_HETZNER_API_KEY",
+  vultr: "HOIST_VULTR_API_KEY",
+  digitalocean: "HOIST_DIGITALOCEAN_API_KEY",
+  hostinger: "HOIST_HOSTINGER_API_KEY",
+  linode: "HOIST_LINODE_API_KEY",
+  scaleway: "HOIST_SCALEWAY_API_KEY",
+};
+
 providerCommand
   .command("add")
-  .description("Add a cloud provider")
-  .action(async () => {
+  .description("Add a cloud provider (reads API key from environment variable)")
+  .requiredOption("--type <type>", `Provider type (${validTypes.join(", ")})`)
+  .option("--label <label>", "Label for this provider")
+  .action(async (opts: { type: string; label?: string }) => {
     if (!hasConfig()) {
       outputError("Run 'hoist init' first.");
       process.exit(1);
     }
 
-    const config = getConfig();
+    if (!validTypes.includes(opts.type)) {
+      outputError(`Invalid provider type "${opts.type}". Valid types: ${validTypes.join(", ")}`);
+      process.exit(2);
+    }
 
-    const providerType = await p.select({
-      message: "Provider type:",
-      options: [...PROVIDER_TYPES],
-    });
-    if (p.isCancel(providerType)) return;
+    const envVar = ENV_VAR_MAP[opts.type];
+    const apiKey = envVar ? process.env[envVar] : undefined;
 
-    const apiKey = await p.password({
-      message: "API key:",
-    });
-    if (p.isCancel(apiKey)) return;
-
-    const label = await p.text({
-      message: "Label:",
-      placeholder: `${providerType}-1`,
-      defaultValue: `${providerType}-1`,
-    });
-    if (p.isCancel(label)) return;
-
-    if (config.providers[label]) {
-      outputError(`Provider "${label}" already exists.`);
+    if (!apiKey) {
+      outputError(
+        `No API key found. Set ${envVar} before running this command.`,
+        undefined,
+        { actor: "user", action: `Run in your terminal: ${envVar}=your-key hoist provider add --type ${opts.type}` }
+      );
       process.exit(1);
     }
 
-    const spinner = p.spinner();
-    spinner.start(`Verifying ${label}...`);
+    const label = opts.label ?? generateRandomName();
+    const config = getConfig();
+
+    if (config.providers[label]) {
+      outputError(`Provider "${label}" already exists.`);
+      process.exit(5);
+    }
+
+    outputProgress("verify", `Verifying ${label}`);
 
     const result = await testProviderConnection(
-      providerType as ProviderConfig["type"],
+      opts.type as ProviderConfig["type"],
       apiKey
     );
 
     if (result.ok) {
-      spinner.stop(`${label} verified (${result.message})`);
       config.providers[label] = {
-        type: providerType as ProviderConfig["type"],
+        type: opts.type as ProviderConfig["type"],
         apiKey,
       };
       if (!config.defaults.provider) {
         config.defaults.provider = label;
       }
       updateConfig(config);
-
-      if ((isJsonMode())) {
-        outputJson({ status: "success", provider: label, type: providerType });
-      } else {
-        outputSuccess(`Provider "${label}" added.`);
-      }
+      outputResult(
+        { status: "added", provider: label, type: opts.type },
+        { actor: "agent", action: "Create a server.", command: "hoist server create" }
+      );
     } else {
-      spinner.stop(chalk.red(`Verification failed: ${result.message}`));
-      if ((isJsonMode())) {
-        outputError("Verification failed", result.message);
-      }
+      outputError("Verification failed", result.message);
       process.exit(1);
     }
   });
@@ -100,130 +100,75 @@ providerCommand
       })
     );
 
-    if ((isJsonMode())) {
-      outputJson(providers);
-      return;
-    }
-
-    if (providers.length === 0) {
-      p.log.warning("No providers configured. Run: hoist provider add");
-      return;
-    }
-
-    for (const provider of providers) {
-      const defaultTag = provider.default ? chalk.dim(" (default)") : "";
-      p.log.info(`${chalk.bold(provider.label)} ${chalk.dim(provider.type)}${defaultTag}`);
-    }
+    outputResult(providers);
   });
 
 providerCommand
   .command("delete")
   .description("Delete a provider")
-  .argument("[label]", "Provider label to delete")
-  .action(async (label?: string, opts?: { }) => {
+  .argument("<label>", "Provider label to delete")
+  .option("--confirm", "Confirm destructive action")
+  .action(async (label: string, opts: { confirm?: boolean }) => {
+    if (!opts.confirm) {
+      outputError(
+        `Destructive action: this will delete provider '${label}' and its API key from config. Re-run with --confirm to proceed.`,
+        undefined,
+        { actor: "agent", action: "Re-run with --confirm if the user approves.", command: `hoist provider delete ${label} --confirm` }
+      );
+      process.exit(1);
+    }
+
     const config = getConfig();
-    const labels = Object.keys(config.providers);
 
-    if (labels.length === 0) {
-      outputError("No providers configured.");
+    if (!config.providers[label]) {
+      outputError(`Provider "${label}" not found.`);
       process.exit(1);
     }
 
-    let targetLabel = label;
-    if (!targetLabel) {
-      if ((isJsonMode())) {
-        outputError("Provider label is required with --json");
-        process.exit(1);
-      }
-      const selected = await p.select({
-        message: "Delete which provider?",
-        options: labels.map((name) => ({ value: name, label: name })),
-      });
-      if (p.isCancel(selected)) return;
-      targetLabel = selected;
-    }
-
-    if (!config.providers[targetLabel]) {
-      outputError(`Provider "${targetLabel}" not found.`);
-      process.exit(1);
-    }
-
-    if (!(isAutoConfirm()) && !(isJsonMode())) {
-      const confirmed = await p.confirm({
-        message: `Delete provider "${targetLabel}"?`,
-      });
-      if (p.isCancel(confirmed) || !confirmed) return;
-    }
-
-    delete config.providers[targetLabel];
-    if (config.defaults.provider === targetLabel) {
+    delete config.providers[label];
+    if (config.defaults.provider === label) {
       config.defaults.provider = Object.keys(config.providers)[0];
     }
     updateConfig(config);
 
-    if ((isJsonMode())) {
-      outputJson({ status: "deleted", provider: targetLabel });
-    } else {
-      outputSuccess(`Provider "${targetLabel}" deleted.`);
-    }
+    outputResult({ status: "deleted", provider: label });
   });
 
 providerCommand
   .command("update")
-  .description("Update API key for a provider")
-  .argument("[label]", "Provider label to update")
-  .action(async (label?: string, opts?: { }) => {
+  .description("Update API key for a provider (reads new key from environment variable)")
+  .argument("<label>", "Provider label to update")
+  .action(async (label: string) => {
     const config = getConfig();
-    const labels = Object.keys(config.providers);
 
-    if (labels.length === 0) {
-      outputError("No providers configured.");
+    if (!config.providers[label]) {
+      outputError(`Provider "${label}" not found.`);
       process.exit(1);
     }
 
-    let targetLabel = label;
-    if (!targetLabel) {
-      const selected = await p.select({
-        message: "Update which provider?",
-        options: labels.map((name) => ({ value: name, label: name })),
-      });
-      if (p.isCancel(selected)) return;
-      targetLabel = selected;
-    }
+    const providerType = config.providers[label].type;
+    const envVar = ENV_VAR_MAP[providerType];
+    const apiKey = envVar ? process.env[envVar] : undefined;
 
-    if (!config.providers[targetLabel]) {
-      outputError(`Provider "${targetLabel}" not found.`);
+    if (!apiKey) {
+      outputError(
+        `No API key found. Set ${envVar} before running this command.`,
+        undefined,
+        { actor: "user", action: `Run in your terminal: ${envVar}=your-key hoist provider update ${label}` }
+      );
       process.exit(1);
     }
 
-    const apiKey = await p.password({
-      message: "New API key:",
-    });
-    if (p.isCancel(apiKey)) return;
+    outputProgress("verify", `Verifying ${label}`);
 
-    const spinner = p.spinner();
-    spinner.start(`Verifying ${targetLabel}...`);
-
-    const result = await testProviderConnection(
-      config.providers[targetLabel].type,
-      apiKey
-    );
+    const result = await testProviderConnection(providerType, apiKey);
 
     if (result.ok) {
-      spinner.stop(`${targetLabel} verified (${result.message})`);
-      config.providers[targetLabel].apiKey = apiKey;
+      config.providers[label].apiKey = apiKey;
       updateConfig(config);
-
-      if ((isJsonMode())) {
-        outputJson({ status: "updated", provider: targetLabel });
-      } else {
-        outputSuccess(`Provider "${targetLabel}" API key updated.`);
-      }
+      outputResult({ status: "updated", provider: label });
     } else {
-      spinner.stop(chalk.red(`Verification failed: ${result.message}`));
-      if ((isJsonMode())) {
-        outputError("Verification failed", result.message);
-      }
+      outputError("Verification failed", result.message);
       process.exit(1);
     }
   });
@@ -232,7 +177,7 @@ providerCommand
   .command("test")
   .description("Verify provider API keys work")
   .argument("[label]", "Provider label to test")
-  .action(async (label?: string, opts?: { }) => {
+  .action(async (label?: string) => {
     const config = getConfig();
     const labels = label ? [label] : Object.keys(config.providers);
 
@@ -249,60 +194,27 @@ providerCommand
         continue;
       }
 
-      if (!(isJsonMode())) {
-        const spinner = p.spinner();
-        spinner.start(`Testing ${name}...`);
-        const result = await testProviderConnection(provider.type, provider.apiKey);
-        spinner.stop(result.ok
-          ? `${name}: ${chalk.green("OK")} (${result.message})`
-          : `${name}: ${chalk.red("FAILED")} (${result.message})`
-        );
-        results.push({ label: name, ...result });
-      } else {
-        const result = await testProviderConnection(provider.type, provider.apiKey);
-        results.push({ label: name, ...result });
-      }
+      const result = await testProviderConnection(provider.type, provider.apiKey);
+      results.push({ label: name, ...result });
     }
 
-    if ((isJsonMode())) {
-      outputJson(results);
-    }
+    outputResult(results);
   });
 
 providerCommand
   .command("set-default")
   .description("Change default provider")
-  .argument("[label]", "Provider label")
-  .action(async (label?: string, opts?: { }) => {
+  .argument("<label>", "Provider label")
+  .action(async (label: string) => {
     const config = getConfig();
-    const labels = Object.keys(config.providers);
 
-    if (labels.length === 0) {
-      outputError("No providers configured.");
+    if (!config.providers[label]) {
+      outputError(`Provider "${label}" not found.`);
       process.exit(1);
     }
 
-    let targetLabel = label;
-    if (!targetLabel) {
-      const selected = await p.select({
-        message: "Default provider:",
-        options: labels.map((name) => ({ value: name, label: name })),
-      });
-      if (p.isCancel(selected)) return;
-      targetLabel = selected;
-    }
-
-    if (!config.providers[targetLabel]) {
-      outputError(`Provider "${targetLabel}" not found.`);
-      process.exit(1);
-    }
-
-    config.defaults.provider = targetLabel;
+    config.defaults.provider = label;
     updateConfig(config);
 
-    if ((isJsonMode())) {
-      outputJson({ status: "success", default: targetLabel });
-    } else {
-      outputSuccess(`Default provider set to "${targetLabel}".`);
-    }
+    outputResult({ status: "success", default: label });
   });

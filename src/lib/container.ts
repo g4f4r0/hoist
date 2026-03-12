@@ -7,12 +7,12 @@ const DEFAULT_WAIT_MS = 5000;
 
 /** Returns the Docker container name for a service. */
 export function containerName(serviceName: string): string {
-  return `hoist-${serviceName}`;
+  return serviceName;
 }
 
 /** Returns the Docker image name for a service. */
 export function imageName(serviceName: string): string {
-  return `hoist-${serviceName}`;
+  return serviceName;
 }
 
 /** Returns a promise that resolves after the given milliseconds. */

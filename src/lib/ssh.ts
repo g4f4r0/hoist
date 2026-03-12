@@ -45,6 +45,16 @@ function updateKnownHosts(hosts: Map<string, string>): void {
   });
 }
 
+/** Removes a host from the hoist known_hosts file so a new key can be accepted. */
+export function clearKnownHost(host: string, port = 22): void {
+  const hostId = `${host}:${port}`;
+  const knownHosts = getKnownHosts();
+  if (knownHosts.has(hostId)) {
+    knownHosts.delete(hostId);
+    updateKnownHosts(knownHosts);
+  }
+}
+
 const pool = new Map<string, { client: InstanceType<typeof Client>; lastUsed: number }>();
 const connecting = new Map<string, Promise<InstanceType<typeof Client>>>();
 

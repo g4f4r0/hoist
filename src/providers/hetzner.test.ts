@@ -94,7 +94,7 @@ describe("listServers", () => {
 });
 
 describe("listRegions", () => {
-  it("maps location fields", async () => {
+  it("maps location fields with available flag", async () => {
     mockResponse({
       locations: [
         { id: 1, name: "fsn1", description: "Falkenstein DC Park 1", city: "Falkenstein", country: "DE" },
@@ -103,18 +103,20 @@ describe("listRegions", () => {
 
     const regions = await hetznerProvider.listRegions("key");
     expect(regions).toEqual([
-      { id: "fsn1", name: "Falkenstein DC Park 1", city: "Falkenstein", country: "DE" },
+      { id: "fsn1", name: "Falkenstein DC Park 1", city: "Falkenstein", country: "DE", available: true },
     ]);
   });
 });
 
 describe("listServerTypes", () => {
-  it("filters to cx and cax types", async () => {
+  it("filters to cx, cax, cpx types and excludes deprecated", async () => {
     mockResponse({
       server_types: [
-        { id: 1, name: "cx22", description: "CX22", cores: 2, memory: 4, disk: 40, prices: [{ location: "fsn1", price_monthly: { gross: "4.35" } }] },
-        { id: 2, name: "cax11", description: "CAX11", cores: 2, memory: 4, disk: 40, prices: [{ location: "fsn1", price_monthly: { gross: "3.29" } }] },
-        { id: 3, name: "ccx13", description: "CCX13", cores: 2, memory: 8, disk: 80, prices: [] },
+        { id: 1, name: "cx22", description: "CX22", cores: 2, memory: 4, disk: 40, deprecated: false, deprecation: null, prices: [{ location: "fsn1", price_monthly: { gross: "4.35" } }] },
+        { id: 2, name: "cax11", description: "CAX11", cores: 2, memory: 4, disk: 40, deprecated: false, deprecation: null, prices: [{ location: "fsn1", price_monthly: { gross: "3.29" } }] },
+        { id: 3, name: "ccx13", description: "CCX13", cores: 2, memory: 8, disk: 80, deprecated: false, deprecation: null, prices: [] },
+        { id: 4, name: "cx11", description: "CX11", cores: 1, memory: 2, disk: 20, deprecated: true, deprecation: null, prices: [{ location: "fsn1", price_monthly: { gross: "3.49" } }] },
+        { id: 5, name: "cx32", description: "CX32", cores: 4, memory: 8, disk: 80, deprecated: false, deprecation: { announced: "2025-01-01" }, prices: [{ location: "fsn1", price_monthly: { gross: "8.49" } }] },
       ],
     });
 
@@ -123,17 +125,34 @@ describe("listServerTypes", () => {
     expect(names).toContain("cx22");
     expect(names).toContain("cax11");
     expect(names).not.toContain("ccx13");
+    expect(names).not.toContain("cx11");
+    expect(names).not.toContain("cx32");
   });
 
-  it("formats monthly cost", async () => {
+  it("sorts by cost ascending", async () => {
     mockResponse({
       server_types: [
-        { id: 1, name: "cx22", description: "CX22", cores: 2, memory: 4, disk: 40, prices: [{ location: "fsn1", price_monthly: { gross: "4.35" } }] },
+        { id: 1, name: "cx22", description: "CX22", cores: 2, memory: 4, disk: 40, deprecated: false, deprecation: null, prices: [{ location: "fsn1", price_monthly: { gross: "4.35" } }] },
+        { id: 2, name: "cax11", description: "CAX11", cores: 2, memory: 4, disk: 40, deprecated: false, deprecation: null, prices: [{ location: "fsn1", price_monthly: { gross: "3.29" } }] },
+      ],
+    });
+
+    const types = await hetznerProvider.listServerTypes("key");
+    expect(types[0].id).toBe("cax11");
+    expect(types[1].id).toBe("cx22");
+  });
+
+  it("includes numeric cost fields", async () => {
+    mockResponse({
+      server_types: [
+        { id: 1, name: "cx22", description: "CX22", cores: 2, memory: 4, disk: 40, deprecated: false, deprecation: null, prices: [{ location: "fsn1", price_monthly: { gross: "4.35" } }] },
       ],
     });
 
     const types = await hetznerProvider.listServerTypes("key");
     expect(types[0].monthlyCost).toBe("€4.35");
+    expect(types[0].monthlyCostCents).toBe(435);
+    expect(types[0].currency).toBe("EUR");
   });
 });
 

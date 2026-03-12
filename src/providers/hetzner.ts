@@ -39,20 +39,25 @@ async function apiJson<T>(
   return res.json() as Promise<T>;
 }
 
-async function getSSHKeyId(
+async function ensureSSHKeyId(
   apiKey: string,
   publicKey: string
 ): Promise<number> {
-  const { ssh_keys } = await apiJson<{
+  const { ssh_keys: sshKeys } = await apiJson<{
     ssh_keys: Array<{ id: number; name: string; public_key: string }>;
   }>("/ssh_keys", apiKey);
 
-  const existing = ssh_keys.find(
+  const byContent = sshKeys.find(
     (k) => k.public_key.trim() === publicKey.trim()
   );
-  if (existing) return existing.id;
+  if (byContent) return byContent.id;
 
-  const { ssh_key } = await apiJson<{
+  const byName = sshKeys.find((k) => k.name === "hoist");
+  if (byName) {
+    await api(`/ssh_keys/${byName.id}`, apiKey, { method: "DELETE" });
+  }
+
+  const { ssh_key: created } = await apiJson<{
     ssh_key: { id: number };
   }>("/ssh_keys", apiKey, {
     method: "POST",
@@ -62,10 +67,10 @@ async function getSSHKeyId(
     }),
   });
 
-  return ssh_key.id;
+  return created.id;
 }
 
-async function getRunningServer(
+async function waitForServer(
   apiKey: string,
   serverId: number,
   timeoutMs = 120000
@@ -120,6 +125,8 @@ interface HetznerServerType {
   cores: number;
   memory: number;
   disk: number;
+  deprecated: boolean;
+  deprecation: { announced: string } | null;
   prices: Array<{
     location: string;
     price_monthly: { gross: string };
@@ -134,6 +141,7 @@ interface HetznerLocation {
   country: string;
 }
 
+/** Hetzner Cloud provider implementation. */
 export const hetznerProvider: Provider = {
   async testConnection(apiKey: string): Promise<ProviderTestResult> {
     try {
@@ -164,6 +172,7 @@ export const hetznerProvider: Provider = {
       name: loc.description,
       city: loc.city,
       country: loc.country,
+      available: true,
     }));
   },
 
@@ -173,17 +182,25 @@ export const hetznerProvider: Provider = {
       apiKey
     );
     return data.server_types
-      .filter((t) => t.name.startsWith("cx") || t.name.startsWith("cax"))
-      .map((t) => ({
-        id: t.name,
-        description: t.description,
-        cpus: t.cores,
-        memoryGb: t.memory,
-        diskGb: t.disk,
-        monthlyCost: t.prices[0]?.price_monthly?.gross
-          ? `€${t.prices[0].price_monthly.gross}`
-          : "N/A",
-      }));
+      .filter((t) => !t.deprecated && !t.deprecation)
+      .filter((t) => t.name.startsWith("cx") || t.name.startsWith("cax") || t.name.startsWith("cpx"))
+      .map((t) => {
+        const grossStr = t.prices[0]?.price_monthly?.gross;
+        const cents = grossStr ? Math.round(parseFloat(grossStr) * 100) : 0;
+        return {
+          id: t.name,
+          description: t.description,
+          cpus: t.cores,
+          memoryGb: t.memory,
+          diskGb: t.disk,
+          monthlyCostCents: cents,
+          currency: "EUR",
+          monthlyCost: grossStr
+            ? `€${parseFloat(grossStr).toFixed(2)}`
+            : "N/A",
+        };
+      })
+      .sort((a, b) => a.monthlyCostCents - b.monthlyCostCents);
   },
 
   async createServer(
@@ -195,7 +212,7 @@ export const hetznerProvider: Provider = {
       sshKeyPublic: string;
     }
   ): Promise<ServerInfo> {
-    const sshKeyId = await getSSHKeyId(apiKey, opts.sshKeyPublic);
+    const sshKeyId = await ensureSSHKeyId(apiKey, opts.sshKeyPublic);
 
     const { server } = await apiJson<{ server: HetznerServer }>(
       "/servers",
@@ -213,7 +230,7 @@ export const hetznerProvider: Provider = {
       }
     );
 
-    return getRunningServer(apiKey, server.id);
+    return waitForServer(apiKey, server.id);
   },
 
   async listServers(apiKey: string): Promise<ServerInfo[]> {

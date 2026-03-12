@@ -1,8 +1,6 @@
 import fs from "node:fs";
 
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
 
 import {
   hasConfig,
@@ -16,13 +14,13 @@ import { testProviderConnection } from "../providers/index.js";
 import { loadProjectConfig } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
 import { exec, closeConnection } from "../lib/ssh.js";
-import { outputJson, isJsonMode } from "../lib/output.js";
+import { outputResult } from "../lib/output.js";
 
-type CheckResult = {
+interface CheckResult {
   name: string;
   status: "pass" | "fail" | "skip";
   message?: string;
-};
+}
 
 async function checkLocalSetup(): Promise<CheckResult[]> {
   const checks: CheckResult[] = [];
@@ -148,17 +146,17 @@ async function checkProjectConfig(): Promise<CheckResult[]> {
     }
 
     try {
-      const result = await exec(sshOpts, "docker inspect -f '{{.State.Running}}' hoist-caddy 2>/dev/null");
+      const result = await exec(sshOpts, "docker inspect -f '{{.State.Running}}' hoist-traefik 2>/dev/null");
       if (result.code === 0 && result.stdout.trim() === "true") {
-        checks.push({ name: `caddy:${name}`, status: "pass", message: `Caddy container running on ${name}` });
+        checks.push({ name: `traefik:${name}`, status: "pass", message: `Traefik container running on ${name}` });
       } else {
-        checks.push({ name: `caddy:${name}`, status: "fail", message: `Caddy container not running on ${name}` });
+        checks.push({ name: `traefik:${name}`, status: "fail", message: `Traefik container not running on ${name}` });
       }
     } catch (err) {
       checks.push({
-        name: `caddy:${name}`,
+        name: `traefik:${name}`,
         status: "fail",
-        message: `Caddy check failed on ${name}: ${err instanceof Error ? err.message : "unknown error"}`,
+        message: `Traefik check failed on ${name}: ${err instanceof Error ? err.message : "unknown error"}`,
       });
     }
 
@@ -168,78 +166,22 @@ async function checkProjectConfig(): Promise<CheckResult[]> {
   return checks;
 }
 
-function formatChecks(checks: CheckResult[]): void {
-  for (const check of checks) {
-    const icon =
-      check.status === "pass"
-        ? chalk.green("✓")
-        : check.status === "skip"
-          ? chalk.yellow("–")
-          : chalk.red("✗");
-    p.log.message(`${icon} ${check.message ?? check.name}`);
-  }
-}
-
 export const doctorCommand = new Command("doctor")
   .description("Run health checks on local setup, providers, and project")
   .action(async () => {
-    const json = isJsonMode();
     const allChecks: CheckResult[] = [];
 
-    if (!json) {
-      p.intro(chalk.bold("Hoist Doctor"));
-    }
+    allChecks.push(...await checkLocalSetup());
+    allChecks.push(...await checkProviders());
+    allChecks.push(...await checkProjectConfig());
 
-    if (!json) {
-      const s = p.spinner();
-      s.start("Checking local setup");
-      const local = await checkLocalSetup();
-      allChecks.push(...local);
-      s.stop("Local setup checked");
-      formatChecks(local);
-    } else {
-      allChecks.push(...await checkLocalSetup());
-    }
+    const healthy = allChecks.every((c) => c.status !== "fail");
+    const failed = allChecks.filter((c) => c.status === "fail");
 
-    if (!json) {
-      const s = p.spinner();
-      s.start("Checking providers");
-      const providers = await checkProviders();
-      allChecks.push(...providers);
-      s.stop("Providers checked");
-      formatChecks(providers);
-    } else {
-      allChecks.push(...await checkProviders());
-    }
-
-    if (!json) {
-      const s = p.spinner();
-      s.start("Checking project config");
-      const project = await checkProjectConfig();
-      allChecks.push(...project);
-      s.stop("Project config checked");
-      formatChecks(project);
-    } else {
-      allChecks.push(...await checkProjectConfig());
-    }
-
-    if (json) {
-      outputJson({
-        status: allChecks.every((c) => c.status !== "fail") ? "healthy" : "unhealthy",
-        checks: allChecks,
-      });
-      return;
-    }
-
-    const failed = allChecks.filter((c) => c.status === "fail").length;
-    const passed = allChecks.filter((c) => c.status === "pass").length;
-    const skipped = allChecks.filter((c) => c.status === "skip").length;
-
-    p.outro(
-      failed === 0
-        ? chalk.green(`All checks passed (${passed} passed, ${skipped} skipped)`)
-        : chalk.red(`${failed} failed, ${passed} passed, ${skipped} skipped`)
+    outputResult(
+      { status: healthy ? "healthy" : "unhealthy", checks: allChecks },
+      healthy ? undefined : { actor: "agent", action: "Fix the failing checks above, then re-run doctor.", command: "hoist doctor" }
     );
 
-    if (failed > 0) process.exit(1);
+    if (failed.length > 0) process.exit(1);
   });

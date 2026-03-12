@@ -39,6 +39,7 @@ async function apiJson<T>(
   return res.json() as Promise<T>;
 }
 
+/** DigitalOcean provider implementation. */
 export const digitaloceanProvider: Provider = {
   async testConnection(apiKey: string): Promise<ProviderTestResult> {
     try {
@@ -73,6 +74,7 @@ export const digitaloceanProvider: Provider = {
         name: region.name,
         city: region.name,
         country: "",
+        available: true,
       }));
   },
 
@@ -98,8 +100,11 @@ export const digitaloceanProvider: Provider = {
         cpus: size.vcpus,
         memoryGb: size.memory / 1024,
         diskGb: size.disk,
+        monthlyCostCents: Math.round(size.price_monthly * 100),
+        currency: "USD",
         monthlyCost: `$${size.price_monthly}`,
-      }));
+      }))
+      .sort((a, b) => a.monthlyCostCents - b.monthlyCostCents);
   },
 
   async createServer(
@@ -111,16 +116,21 @@ export const digitaloceanProvider: Provider = {
       sshKeyPublic: string;
     }
   ): Promise<ServerInfo> {
-    const { ssh_keys } = await apiJson<{
-      ssh_keys: Array<{ id: number; public_key: string }>;
+    const { ssh_keys: sshKeys } = await apiJson<{
+      ssh_keys: Array<{ id: number; public_key: string; name: string }>;
     }>("/account/keys", apiKey);
 
-    let sshKeyId = ssh_keys.find(
+    let sshKeyId = sshKeys.find(
       (k) => k.public_key.trim() === opts.sshKeyPublic.trim()
     )?.id;
 
     if (!sshKeyId) {
-      const { ssh_key } = await apiJson<{ ssh_key: { id: number } }>(
+      const byName = sshKeys.find((k) => k.name === "hoist");
+      if (byName) {
+        await api(`/account/keys/${byName.id}`, apiKey, { method: "DELETE" });
+      }
+
+      const { ssh_key: created } = await apiJson<{ ssh_key: { id: number } }>(
         "/account/keys",
         apiKey,
         {
@@ -131,7 +141,7 @@ export const digitaloceanProvider: Provider = {
           }),
         }
       );
-      sshKeyId = ssh_key.id;
+      sshKeyId = created.id;
     }
 
     const { droplet } = await apiJson<{

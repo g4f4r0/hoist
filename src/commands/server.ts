@@ -1,15 +1,16 @@
 import { spawn } from "node:child_process";
+
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
+
 import { getConfig, updateConfig, hasConfig } from "../lib/config.js";
 import { readPublicKey, hasKeys, getPrivateKeyPath } from "../lib/ssh-keys.js";
-import { getProvider, type ServerInfo } from "../providers/index.js";
+import { getProvider, type ServerInfo, type RegionInfo } from "../providers/index.js";
 import { setupServer, checkHealth } from "../lib/server-setup.js";
 import { exec, execOrFail, closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
+import { outputResult, outputError, outputProgress } from "../lib/output.js";
 import { getConfiguredProvider } from "../lib/server-resolve.js";
 import { generateRandomName } from "../lib/random-name.js";
+import { provisionServer } from "../lib/provisioner.js";
 
 function hasSetup(): boolean {
   return hasConfig() && hasKeys();
@@ -33,13 +34,10 @@ serverCommand
       type?: string;
       region?: string;
     }) => {
-      const json = isJsonMode();
-      const yes = isAutoConfirm();
-
       if (!hasSetup()) {
-      outputError("Run 'hoist init' first.");
-      process.exit(1);
-    };
+        outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
+        process.exit(1);
+      }
 
       let resolved;
       try {
@@ -50,168 +48,202 @@ serverCommand
       }
       const { label, providerConfig, provider } = resolved;
 
-      // Server name: use provided, prompt interactively, or generate random
-      let serverName = opts.name;
-      if (!serverName && !json && !yes) {
-        const input = await p.text({
-          message: "Server name:",
-          placeholder: "leave empty for random name",
-        });
-        if (p.isCancel(input)) return;
-        serverName = input || undefined;
-      }
-      if (!serverName) {
-        serverName = generateRandomName();
-      }
+      const serverName = opts.name ?? generateRandomName();
 
-      // Region: use provided, auto-select first, or prompt
       let region = opts.region;
+      let availableRegions: RegionInfo[] = [];
       if (!region) {
-        const spinner = p.spinner();
-        if (!json) spinner.start(`Fetching regions from ${label}...`);
-        const regions = await provider.listRegions(providerConfig.apiKey);
-        if (!json) spinner.stop(`${regions.length} regions available.`);
+        outputProgress("regions", `Fetching regions from ${label}`);
+        availableRegions = await provider.listRegions(providerConfig.apiKey);
 
-        if (json || yes) {
-          // Auto-select first available region
-          if (regions.length === 0) {
-            outputError("No regions available from provider");
-            process.exit(1);
-          }
-          region = regions[0].id;
-        } else {
-          const selected = await p.select({
-            message: "Region:",
-            options: regions.map((r) => ({
-              value: r.id,
-              label: `${r.id} — ${r.city}, ${r.country}`,
-            })),
-          });
-          if (p.isCancel(selected)) return;
-          region = selected;
+        if (availableRegions.length === 0) {
+          outputError("No regions available from provider");
+          process.exit(1);
         }
+        region = availableRegions[0].id;
       }
 
-      // Server type: use provided, auto-select cheapest, or prompt
       let serverType = opts.type;
       if (!serverType) {
-        const spinner = p.spinner();
-        if (!json) spinner.start(`Fetching server types from ${label}...`);
+        outputProgress("types", `Fetching server types from ${label}`);
         const types = await provider.listServerTypes(providerConfig.apiKey);
-        if (!json) spinner.stop(`${types.length} types available.`);
 
-        if (json || yes) {
-          // Auto-select cheapest (first in list)
-          if (types.length === 0) {
-            outputError("No server types available from provider");
-            process.exit(1);
-          }
-          serverType = types[0].id;
-        } else {
-          const selected = await p.select({
-            message: "Server type:",
-            options: types.slice(0, 15).map((t) => ({
-              value: t.id,
-              label: `${t.id} — ${t.cpus} vCPU, ${t.memoryGb}GB RAM, ${t.diskGb}GB disk (${t.monthlyCost}/mo)`,
-            })),
-          });
-          if (p.isCancel(selected)) return;
-          serverType = selected;
+        if (types.length === 0) {
+          outputError("No server types available from provider");
+          process.exit(1);
         }
+        serverType = types[0].id;
       }
 
-      if (!yes && !json) {
-        const confirmed = await p.confirm({
-          message: `Create ${chalk.bold(serverType)} in ${chalk.bold(region)} on ${chalk.bold(label)} as "${chalk.bold(serverName)}"?`,
-        });
-        if (p.isCancel(confirmed) || !confirmed) return;
-      }
+      outputProgress("provision", `Provisioning ${serverType} in ${region} on ${label} as "${serverName}"`);
 
-      const spinner = p.spinner();
-      if (!json) spinner.start("Provisioning server (this takes ~60s)...");
+      const fallbackRegions = opts.region
+        ? []
+        : availableRegions.filter((r) => r.id !== region).map((r) => r.id);
 
-      let serverInfo: ServerInfo;
       try {
-        serverInfo = await provider.createServer(providerConfig.apiKey, {
+        const { server: serverInfo, region: usedRegion } = await provisionServer({
+          provider,
+          apiKey: providerConfig.apiKey,
           name: serverName,
           type: serverType,
           region: region!,
           sshKeyPublic: readPublicKey(),
+          fallbackRegions,
+          onProgress: (msg) => {
+            outputProgress("provision", msg);
+          },
         });
+        region = usedRegion;
+
+        outputResult(
+          { server: serverName, provider: label, ip: serverInfo.ip, type: serverType, region, status: "ready" },
+          { actor: "agent", action: "Create hoist.json and deploy an app.", command: "hoist deploy" }
+        );
       } catch (err) {
-        if (!json) spinner.stop(chalk.red("Provisioning failed."));
         outputError(
           "Server creation failed",
           err instanceof Error ? err.message : err
         );
         process.exit(1);
       }
-
-      if (!json)
-        spinner.stop(
-          `Server ${chalk.bold(serverName)} created at ${chalk.bold(serverInfo.ip)}`
-        );
-
-      if (!json) spinner.start("Setting up server (Docker, firewall, Caddy)...");
-
-      const sshOpts = {
-        host: serverInfo.ip!,
-        port: 22,
-        username: "root",
-      };
-
-      // SSH daemon needs time to start after provisioning
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-
-      try {
-        await setupServer(sshOpts, (msg) => {
-          if (!json) spinner.message(msg);
-        });
-      } catch (err) {
-        if (!json) spinner.stop(chalk.yellow("Setup had issues."));
-        // Don't exit — server exists, setup can be retried
-        outputError(
-          "Server setup warning",
-          err instanceof Error ? err.message : err
-        );
-      }
-
-      try {
-        const health = await checkHealth(sshOpts);
-        if (!json)
-          spinner.stop(
-            health.healthy
-              ? chalk.green("Server ready.")
-              : chalk.yellow("Server created but some checks failed.")
-          );
-      } catch {
-        if (!json) spinner.stop("Server created.");
-      }
-
-      closeConnection(sshOpts);
-
-      const result = {
-        server: serverName,
-        provider: label,
-        ip: serverInfo.ip,
-        type: serverType,
-        region,
-        status: "ready",
-      };
-
-      if (json) {
-        outputJson(result);
-      } else {
-        outputSuccess(`Server "${serverName}" is ready at ${serverInfo.ip}`);
-      }
     }
   );
+
+serverCommand
+  .command("regions")
+  .description("List available regions for a provider")
+  .option("--provider <provider>", "Provider label")
+  .action(async (opts: { provider?: string }) => {
+    if (!hasSetup()) {
+      outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
+      process.exit(1);
+    }
+    const resolved = getConfiguredProvider(opts.provider);
+    const regions = await resolved.provider.listRegions(resolved.providerConfig.apiKey);
+    outputResult(regions);
+  });
+
+serverCommand
+  .command("types")
+  .description("List available server types and pricing for a provider")
+  .option("--provider <provider>", "Provider label")
+  .action(async (opts: { provider?: string }) => {
+    if (!hasSetup()) {
+      outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
+      process.exit(1);
+    }
+    const resolved = getConfiguredProvider(opts.provider);
+    const types = await resolved.provider.listServerTypes(resolved.providerConfig.apiKey);
+    outputResult(types);
+  });
+
+serverCommand
+  .command("stats")
+  .description("Show server resource usage (CPU, RAM, disk, bandwidth)")
+  .argument("<name>", "Server name")
+  .option("--provider <provider>", "Provider label")
+  .action(async (name: string, opts: { provider?: string }) => {
+    if (!hasSetup()) {
+      outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
+      process.exit(1);
+    }
+    const config = getConfig();
+    const labels = opts.provider ? [opts.provider] : Object.keys(config.providers);
+
+    let ip = "";
+    if (config.importedServers?.[name]) {
+      ip = config.importedServers[name].ip;
+    } else {
+      for (const providerName of labels) {
+        const providerConfig = config.providers[providerName];
+        if (!providerConfig) continue;
+        const provider = getProvider(providerConfig.type);
+        const servers = await provider.listServers(providerConfig.apiKey);
+        const match = servers.find((s) => s.name === name);
+        if (match?.ip) {
+          ip = match.ip;
+          break;
+        }
+      }
+    }
+
+    if (!ip) {
+      outputError(`Server "${name}" not found or has no IP.`);
+      process.exit(1);
+    }
+
+    const sshOpts = { host: ip, port: 22, username: "root" };
+    try {
+      const result = await exec(sshOpts, [
+        "echo CPU_CORES=$(nproc)",
+        "echo CPU_USAGE=$(top -bn1 | grep 'Cpu(s)' | awk '{print 100 - $8}')",
+        "free -b | awk '/Mem:/ {printf \"MEM_TOTAL=%s\\nMEM_USED=%s\\nMEM_AVAILABLE=%s\\n\", $2, $3, $7}'",
+        "df -B1 / | awk 'NR==2 {printf \"DISK_TOTAL=%s\\nDISK_USED=%s\\nDISK_AVAILABLE=%s\\n\", $2, $3, $4}'",
+        "cat /proc/uptime | awk '{printf \"UPTIME_SECONDS=%d\\n\", $1}'",
+        "docker ps -q 2>/dev/null | wc -l | awk '{printf \"CONTAINERS_RUNNING=%s\\n\", $1}'",
+      ].join(" && "));
+      closeConnection(sshOpts);
+
+      const vals: Record<string, string> = {};
+      for (const line of result.stdout.split("\n")) {
+        const [k, v] = line.split("=");
+        if (k && v) vals[k.trim()] = v.trim();
+      }
+
+      const memTotal = Number(vals.MEM_TOTAL) || 0;
+      const memUsed = Number(vals.MEM_USED) || 0;
+      const diskTotal = Number(vals.DISK_TOTAL) || 0;
+      const diskUsed = Number(vals.DISK_USED) || 0;
+      const cpuUsage = parseFloat(vals.CPU_USAGE) || 0;
+      const memPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
+      const diskPercent = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0;
+
+      const gb = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(1);
+      const uptimeHours = Math.floor((Number(vals.UPTIME_SECONDS) || 0) / 3600);
+
+      const stats = {
+        server: name,
+        cpu: {
+          cores: Number(vals.CPU_CORES) || 0,
+          usagePercent: Math.round(cpuUsage * 10) / 10,
+        },
+        memory: {
+          totalGb: gb(memTotal),
+          usedGb: gb(memUsed),
+          usagePercent: Math.round(memPercent * 10) / 10,
+        },
+        disk: {
+          totalGb: gb(diskTotal),
+          usedGb: gb(diskUsed),
+          usagePercent: Math.round(diskPercent * 10) / 10,
+        },
+        containers: Number(vals.CONTAINERS_RUNNING) || 0,
+        uptimeHours,
+      };
+
+      const warnings: string[] = [];
+      if (cpuUsage > 80) warnings.push(`CPU at ${stats.cpu.usagePercent}% — consider upgrading`);
+      if (memPercent > 80) warnings.push(`Memory at ${stats.memory.usagePercent}% — consider upgrading`);
+      if (diskPercent > 80) warnings.push(`Disk at ${stats.disk.usagePercent}% — consider cleanup or upgrade`);
+
+      outputResult(
+        { ...stats, ...(warnings.length > 0 ? { warnings } : {}) },
+        warnings.length > 0
+          ? { actor: "user", action: `Server resources are running high. ${warnings[0]}.` }
+          : undefined
+      );
+    } catch (err) {
+      outputError("Failed to get server stats", err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+  });
 
 serverCommand
   .command("import")
   .description("Import an existing server by IP address")
   .option("--name <name>", "Server name (random if omitted)")
-  .option("--ip <ip>", "Server IP address")
+  .option("--ip <ip>", "Server IP address (required)")
   .option("--user <user>", "SSH user for initial connection", "root")
   .action(
     async (opts: {
@@ -219,48 +251,18 @@ serverCommand
       ip?: string;
       user: string;
     }) => {
-      const json = isJsonMode();
-      const yes = isAutoConfirm();
-
       if (!hasSetup()) {
-      outputError("Run 'hoist init' first.");
-      process.exit(1);
-    };
-
-      // Server name: use provided or generate random
-      let serverName = opts.name;
-      if (!serverName && !json && !yes) {
-        const input = await p.text({
-          message: "Server name:",
-          placeholder: "leave empty for random name",
-        });
-        if (p.isCancel(input)) return;
-        serverName = input || undefined;
-      }
-      if (!serverName) {
-        serverName = generateRandomName();
-      }
-
-      let ip = opts.ip;
-      if (!ip && !json && !yes) {
-        const input = await p.text({
-          message: "Server IP address:",
-          validate: (v) => (v.length === 0 ? "IP is required" : undefined),
-        });
-        if (p.isCancel(input)) return;
-        ip = input;
-      }
-      if (!ip) {
-        outputError("--ip is required");
+        outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
         process.exit(1);
       }
 
-      if (!yes && !json) {
-        const confirmed = await p.confirm({
-          message: `Import server ${chalk.bold(serverName)} at ${chalk.bold(ip)} as user ${chalk.bold(opts.user)}?`,
-        });
-        if (p.isCancel(confirmed) || !confirmed) return;
+      const serverName = opts.name ?? generateRandomName();
+
+      if (!opts.ip) {
+        outputError("--ip is required");
+        process.exit(1);
       }
+      const ip = opts.ip;
 
       const sshOpts = {
         host: ip,
@@ -268,22 +270,18 @@ serverCommand
         username: opts.user,
       };
 
-      const spinner = p.spinner();
-
-      if (!json) spinner.start("Testing SSH connection...");
+      outputProgress("ssh", "Testing SSH connection");
       try {
         await exec(sshOpts, "echo ok");
       } catch (err) {
-        if (!json) spinner.stop(chalk.red("SSH connection failed."));
         outputError(
           "Cannot connect to server",
           err instanceof Error ? err.message : err
         );
         process.exit(1);
       }
-      if (!json) spinner.stop("SSH connection successful.");
 
-      if (!json) spinner.start("Uploading SSH public key...");
+      outputProgress("keys", "Uploading SSH public key");
       const publicKey = readPublicKey().replace(/'/g, "'\\''");
       try {
         await execOrFail(
@@ -291,7 +289,6 @@ serverCommand
           `mkdir -p ~/.ssh && echo '${publicKey}' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys`
         );
       } catch (err) {
-        if (!json) spinner.stop(chalk.red("Key upload failed."));
         outputError(
           "Failed to upload SSH key",
           err instanceof Error ? err.message : err
@@ -299,9 +296,8 @@ serverCommand
         closeConnection(sshOpts);
         process.exit(1);
       }
-      if (!json) spinner.stop("SSH public key uploaded.");
 
-      if (!json) spinner.start("Setting up server (Docker, firewall, Caddy)...");
+      outputProgress("setup", "Setting up server (Docker, firewall, Traefik)");
       closeConnection(sshOpts);
       const hoistSshOpts = {
         host: ip,
@@ -311,10 +307,9 @@ serverCommand
 
       try {
         await setupServer(hoistSshOpts, (msg) => {
-          if (!json) spinner.message(msg);
+          outputProgress("setup", msg);
         });
       } catch (err) {
-        if (!json) spinner.stop(chalk.yellow("Setup had issues."));
         outputError(
           "Server setup warning",
           err instanceof Error ? err.message : err
@@ -322,15 +317,9 @@ serverCommand
       }
 
       try {
-        const health = await checkHealth(hoistSshOpts);
-        if (!json)
-          spinner.stop(
-            health.healthy
-              ? chalk.green("Server ready.")
-              : chalk.yellow("Server imported but some checks failed.")
-          );
+        await checkHealth(hoistSshOpts);
       } catch {
-        if (!json) spinner.stop("Server imported.");
+        // Health check failure is non-fatal for import
       }
 
       closeConnection(hoistSshOpts);
@@ -340,18 +329,10 @@ serverCommand
       config.importedServers[serverName] = { ip, user: "root" };
       updateConfig(config);
 
-      const result = {
-        server: serverName,
-        provider: "imported",
-        ip,
-        status: "ready",
-      };
-
-      if (json) {
-        outputJson(result);
-      } else {
-        outputSuccess(`Server "${serverName}" imported and ready at ${ip}`);
-      }
+      outputResult(
+        { server: serverName, provider: "imported", ip, status: "ready" },
+        { actor: "agent", action: "Create hoist.json and deploy an app.", command: "hoist deploy" }
+      );
     }
   );
 
@@ -360,12 +341,10 @@ serverCommand
   .description("List all servers")
   .option("--provider <provider>", "Provider label (default: all)")
   .action(async (opts: { provider?: string }) => {
-    const json = isJsonMode();
-
     if (!hasSetup()) {
-      outputError("Run 'hoist init' first.");
+      outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
       process.exit(1);
-    };
+    }
     const config = getConfig();
 
     const labels = opts.provider
@@ -386,12 +365,8 @@ serverCommand
         for (const server of servers) {
           allServers.push({ ...server, provider: name });
         }
-      } catch (err) {
-        if (!json) {
-          p.log.warning(
-            `Failed to list servers from ${name}: ${err instanceof Error ? err.message : err}`
-          );
-        }
+      } catch {
+        // Skip providers that fail to list
       }
     }
 
@@ -410,25 +385,7 @@ serverCommand
       }
     }
 
-    if (json) {
-      outputJson(allServers);
-      return;
-    }
-
-    if (allServers.length === 0) {
-      p.log.info("No servers found. Create one with: hoist server create");
-      return;
-    }
-
-    for (const server of allServers) {
-      const statusColor =
-        server.status === "running"
-          ? chalk.green(server.status)
-          : chalk.yellow(server.status);
-      p.log.info(
-        `${chalk.bold(server.name)} ${chalk.dim(server.provider)} ${server.ip || "no IP"} ${statusColor} ${chalk.dim(server.type + " / " + server.region)}`
-      );
-    }
+    outputResult(allServers);
   });
 
 serverCommand
@@ -441,12 +398,10 @@ serverCommand
       name: string,
       opts: { provider?: string }
     ) => {
-      const json = isJsonMode();
-
       if (!hasSetup()) {
-      outputError("Run 'hoist init' first.");
-      process.exit(1);
-    };
+        outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
+        process.exit(1);
+      }
       const config = getConfig();
 
       const labels = opts.provider
@@ -496,36 +451,12 @@ serverCommand
         }
       }
 
-      const result = {
+      outputResult({
         ...found,
         health: health
           ? { healthy: health.healthy, checks: health.details }
           : null,
-      };
-
-      if (json) {
-        outputJson(result);
-        return;
-      }
-
-      p.log.info(`${chalk.bold("Name:")}     ${found.name}`);
-      p.log.info(`${chalk.bold("Provider:")} ${found.provider}`);
-      p.log.info(`${chalk.bold("IP:")}       ${found.ip || "none"}`);
-      p.log.info(`${chalk.bold("Type:")}     ${found.type}`);
-      p.log.info(`${chalk.bold("Region:")}   ${found.region}`);
-      p.log.info(`${chalk.bold("Status:")}   ${found.status}`);
-
-      if (health) {
-        p.log.info("");
-        p.log.info(
-          chalk.bold("Health:") +
-            " " +
-            (health.healthy ? chalk.green("healthy") : chalk.red("unhealthy"))
-        );
-        for (const detail of health.details) {
-          p.log.info(`  ${detail}`);
-        }
-      }
+      });
     }
   );
 
@@ -534,18 +465,26 @@ serverCommand
   .description("Delete a server")
   .argument("<name>", "Server name")
   .option("--provider <provider>", "Provider label")
+  .option("--confirm", "Confirm destructive action")
   .action(
     async (
       name: string,
-      opts: { provider?: string }
+      opts: { provider?: string; confirm?: boolean }
     ) => {
-      const json = isJsonMode();
-      const yes = isAutoConfirm();
-
       if (!hasSetup()) {
-      outputError("Run 'hoist init' first.");
-      process.exit(1);
-    };
+        outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
+        process.exit(1);
+      }
+
+      if (!opts.confirm) {
+        outputError(
+          `Destructive action: this will permanently destroy server '${name}'. Re-run with --confirm to proceed.`,
+          undefined,
+          { actor: "agent", action: "Re-run with --confirm if the user approves.", command: `hoist server destroy ${name} --confirm` }
+        );
+        process.exit(1);
+      }
+
       const config = getConfig();
 
       const labels = opts.provider
@@ -566,19 +505,9 @@ serverCommand
       }
 
       if (!found && config.importedServers?.[name]) {
-        if (!yes && !json) {
-          const confirmed = await p.confirm({
-            message: `Remove imported server "${name}" from config?`,
-          });
-          if (p.isCancel(confirmed) || !confirmed) return;
-        }
         delete config.importedServers[name];
         updateConfig(config);
-        if (json) {
-          outputJson({ status: "removed", server: name });
-        } else {
-          outputSuccess(`Imported server "${name}" removed from config.`);
-        }
+        outputResult({ status: "removed", server: name });
         return;
       }
 
@@ -587,29 +516,15 @@ serverCommand
         process.exit(1);
       }
 
-      if (!yes && !json) {
-        const confirmed = await p.confirm({
-          message: `Destroy server "${name}"? This cannot be undone.`,
-        });
-        if (p.isCancel(confirmed) || !confirmed) return;
-      }
-
       const providerConfig = config.providers[found.provider];
       const provider = getProvider(providerConfig.type);
 
-      const spinner = p.spinner();
-      if (!json) spinner.start(`Destroying ${name}...`);
+      outputProgress("destroy", `Destroying ${name}`);
 
       try {
         await provider.deleteServer(providerConfig.apiKey, found.id);
-        if (!json) spinner.stop(`Server "${name}" destroyed.`);
-        if (json) {
-          outputJson({ status: "destroyed", server: name });
-        } else {
-          outputSuccess(`Server "${name}" destroyed.`);
-        }
+        outputResult({ status: "destroyed", server: name });
       } catch (err) {
-        if (!json) spinner.stop(chalk.red("Failed."));
         outputError(
           `Failed to destroy "${name}"`,
           err instanceof Error ? err.message : err
@@ -626,9 +541,9 @@ serverCommand
   .option("--provider <provider>", "Provider label")
   .action(async (name: string, opts: { provider?: string }) => {
     if (!hasSetup()) {
-      outputError("Run 'hoist init' first.");
+      outputError("Run 'hoist init' first.", undefined, { actor: "agent", action: "Run hoist init to set up.", command: "hoist init" });
       process.exit(1);
-    };
+    }
     const config = getConfig();
 
     const labels = opts.provider

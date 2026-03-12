@@ -1,5 +1,30 @@
 import { execOrFail, type SSHConnectionOptions } from "./ssh.js";
 
+const TRAEFIK_STATIC_CONFIG = `entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+  websecure:
+    address: ":443"
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      storage: /etc/traefik/acme.json
+      httpChallenge:
+        entryPoint: web
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: hoist
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+`;
+
 /** Runs the idempotent setup script on a fresh server after provisioning. */
 export async function setupServer(
   ssh: SSHConnectionOptions,
@@ -34,7 +59,7 @@ export async function setupServer(
   await execStep(
     "sed -i 's/#\\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && " +
       "sed -i 's/#\\?ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config && " +
-      "systemctl reload sshd",
+      "(systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true)",
     "Disabling SSH password auth"
   );
 
@@ -44,16 +69,26 @@ export async function setupServer(
   );
 
   await execStep(
-    `docker inspect hoist-caddy > /dev/null 2>&1 || docker run -d \\
-      --name hoist-caddy \\
+    "mkdir -p /etc/traefik/dynamic && touch /etc/traefik/acme.json && chmod 600 /etc/traefik/acme.json",
+    "Creating Traefik directories"
+  );
+
+  await execStep(
+    `cat > /etc/traefik/traefik.yml << 'HOISTEOF'\n${TRAEFIK_STATIC_CONFIG}HOISTEOF`,
+    "Writing Traefik static config"
+  );
+
+  await execStep(
+    `docker inspect hoist-traefik > /dev/null 2>&1 || docker run -d \\
+      --name hoist-traefik \\
       --network hoist \\
       --restart unless-stopped \\
       -p 80:80 \\
       -p 443:443 \\
-      -v hoist-caddy-data:/data \\
-      -v hoist-caddy-config:/config \\
-      caddy:2-alpine`,
-    "Starting Caddy reverse proxy"
+      -v /etc/traefik:/etc/traefik \\
+      -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+      traefik:v3`,
+    "Starting Traefik reverse proxy"
   );
 
   await execStep("mkdir -p /var/log/hoist", "Creating audit log directory");
@@ -64,7 +99,7 @@ export async function setupServer(
   );
 }
 
-/** Checks Docker, Caddy, and firewall status on the server. */
+/** Checks Docker, Traefik, and firewall status on the server. */
 export async function checkHealth(
   ssh: SSHConnectionOptions
 ): Promise<{ healthy: boolean; details: string[] }> {
@@ -82,11 +117,11 @@ export async function checkHealth(
   try {
     await execOrFail(
       ssh,
-      "docker inspect hoist-caddy --format '{{.State.Status}}' 2>/dev/null | grep -q running"
+      "docker inspect hoist-traefik --format '{{.State.Status}}' 2>/dev/null | grep -q running"
     );
-    details.push("Caddy: running");
+    details.push("Traefik: running");
   } catch {
-    details.push("Caddy: not running");
+    details.push("Traefik: not running");
     healthy = false;
   }
 

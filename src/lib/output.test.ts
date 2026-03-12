@@ -1,107 +1,91 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { setJsonMode, isJsonMode, outputJson, outputSuccess, outputError, outputInfo } from "./output.js";
+import { outputProgress, outputResult, outputError } from "./output.js";
 
 let logSpy: ReturnType<typeof vi.spyOn>;
-let errorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  setJsonMode(false);
   logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-  errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
   logSpy.mockRestore();
-  errorSpy.mockRestore();
 });
 
-describe("json mode", () => {
-  it("defaults to false", () => {
-    expect(isJsonMode()).toBe(false);
-  });
-
-  it("can be toggled", () => {
-    setJsonMode(true);
-    expect(isJsonMode()).toBe(true);
-    setJsonMode(false);
-    expect(isJsonMode()).toBe(false);
+describe("outputProgress", () => {
+  it("emits NDJSON progress line", () => {
+    outputProgress("build", "compiling");
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.type).toBe("progress");
+    expect(output.phase).toBe("build");
+    expect(output.message).toBe("compiling");
+    expect(output.timestamp).toBeDefined();
   });
 });
 
-describe("outputJson", () => {
-  it("writes formatted JSON to stdout", () => {
-    outputJson({ key: "value" });
-    expect(logSpy).toHaveBeenCalledWith(JSON.stringify({ key: "value" }, null, 2));
+describe("outputResult", () => {
+  it("emits NDJSON result with data", () => {
+    outputResult({ key: "value" });
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.type).toBe("result");
+    expect(output.status).toBe("success");
+    expect(output.data).toEqual({ key: "value" });
   });
 
   it("handles arrays", () => {
-    outputJson([1, 2, 3]);
-    expect(logSpy).toHaveBeenCalledWith(JSON.stringify([1, 2, 3], null, 2));
+    outputResult([1, 2, 3]);
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.data).toEqual([1, 2, 3]);
   });
 
   it("handles null", () => {
-    outputJson(null);
-    expect(logSpy).toHaveBeenCalledWith("null");
-  });
-});
-
-describe("outputSuccess", () => {
-  it("writes JSON in json mode", () => {
-    setJsonMode(true);
-    outputSuccess("done");
+    outputResult(null);
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.status).toBe("success");
-    expect(output.message).toBe("done");
+    expect(output.data).toBeNull();
   });
 
-  it("includes data in json mode", () => {
-    setJsonMode(true);
-    outputSuccess("done", { url: "https://example.com" });
+  it("includes next step when provided", () => {
+    outputResult({ ok: true }, { actor: "agent", action: "deploy the app", command: "hoist deploy" });
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.data.url).toBe("https://example.com");
+    expect(output.next).toEqual({ actor: "agent", action: "deploy the app", command: "hoist deploy" });
   });
 
-  it("writes to stderr in human mode", () => {
-    outputSuccess("done");
-    expect(errorSpy).toHaveBeenCalled();
-    expect(logSpy).not.toHaveBeenCalled();
+  it("omits next when not provided", () => {
+    outputResult({ ok: true });
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.next).toBeUndefined();
   });
 });
 
 describe("outputError", () => {
-  it("writes JSON in json mode", () => {
-    setJsonMode(true);
+  it("emits NDJSON error line", () => {
     outputError("failed");
     const output = JSON.parse(logSpy.mock.calls[0][0]);
-    expect(output.status).toBe("error");
+    expect(output.type).toBe("error");
     expect(output.message).toBe("failed");
   });
 
-  it("includes details in json mode", () => {
-    setJsonMode(true);
+  it("includes details when provided", () => {
     outputError("failed", "something broke");
     const output = JSON.parse(logSpy.mock.calls[0][0]);
     expect(output.details).toBe("something broke");
   });
 
-  it("writes to stderr in human mode", () => {
+  it("omits details when not provided", () => {
     outputError("failed");
-    expect(errorSpy).toHaveBeenCalled();
-    expect(logSpy).not.toHaveBeenCalled();
-  });
-});
-
-describe("outputInfo", () => {
-  it("writes to stderr in human mode", () => {
-    outputInfo("info message");
-    expect(errorSpy).toHaveBeenCalled();
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.details).toBeUndefined();
   });
 
-  it("is silent in json mode", () => {
-    setJsonMode(true);
-    outputInfo("info message");
-    expect(errorSpy).not.toHaveBeenCalled();
-    expect(logSpy).not.toHaveBeenCalled();
+  it("includes next step when provided", () => {
+    outputError("not configured", undefined, { actor: "user", action: "Run in your terminal: HOIST_HETZNER_API_KEY=your-key hoist init" });
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.next).toEqual({ actor: "user", action: "Run in your terminal: HOIST_HETZNER_API_KEY=your-key hoist init" });
+  });
+
+  it("omits next when not provided", () => {
+    outputError("failed", "detail");
+    const output = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(output.next).toBeUndefined();
   });
 });

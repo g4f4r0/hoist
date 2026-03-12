@@ -3,28 +3,28 @@ import { describe, it, expect } from "vitest";
 import { containerName, imageName, buildDockerRunCmd } from "./container.js";
 
 describe("containerName", () => {
-  it("prefixes with hoist-", () => {
-    expect(containerName("web")).toBe("hoist-web");
-    expect(containerName("api-server")).toBe("hoist-api-server");
+  it("returns service name as-is", () => {
+    expect(containerName("web")).toBe("web");
+    expect(containerName("api-server")).toBe("api-server");
   });
 });
 
 describe("imageName", () => {
-  it("prefixes with hoist-", () => {
-    expect(imageName("web")).toBe("hoist-web");
+  it("returns service name as-is", () => {
+    expect(imageName("web")).toBe("web");
   });
 });
 
 describe("buildDockerRunCmd", () => {
   it("builds basic run command", () => {
-    const cmd = buildDockerRunCmd("hoist-web", "hoist-web:latest", {});
+    const cmd = buildDockerRunCmd("web", "web:latest", {});
     expect(cmd).toBe(
-      "docker run -d --name hoist-web --network hoist --restart unless-stopped hoist-web:latest"
+      "docker run -d --name web --network hoist --restart unless-stopped web:latest"
     );
   });
 
   it("includes env vars", () => {
-    const cmd = buildDockerRunCmd("hoist-web", "img:latest", {
+    const cmd = buildDockerRunCmd("web", "img:latest", {
       NODE_ENV: "production",
       PORT: "3000",
     });
@@ -33,7 +33,7 @@ describe("buildDockerRunCmd", () => {
   });
 
   it("escapes single quotes in env values", () => {
-    const cmd = buildDockerRunCmd("hoist-web", "img:latest", {
+    const cmd = buildDockerRunCmd("web", "img:latest", {
       MSG: "it's alive",
     });
     expect(cmd).toContain("-e 'MSG=it'\\''s alive'");

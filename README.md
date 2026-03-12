@@ -61,7 +61,7 @@ hoist server create
 hoist deploy
 
 # 4. Add a database
-hoist template create --type postgres
+hoist deploy --template postgres --server prod
 
 # 5. Point your domain (auto-SSL included)
 hoist domain add api.myapp.com
@@ -84,7 +84,7 @@ Behind the conversation above, the agent ran:
 ```bash
 hoist server create --name prod --type cx22 --region fsn1
 hoist deploy
-hoist template create --type postgres --version 16
+hoist deploy --template postgres --server prod
 hoist env set api DATABASE_URL="postgresql://..."
 hoist domain add api.myapp.com
 ```
@@ -94,8 +94,8 @@ hoist domain add api.myapp.com
 ## Features
 
 - **Zero-downtime deploys** from any Dockerfile, with automatic rollback on failure
-- **One-command databases** — Postgres, MySQL, Redis, MongoDB via built-in templates
-- **Auto-SSL** via Let's Encrypt through Caddy reverse proxy
+- **One-command databases** — Postgres, MySQL, MariaDB, Redis, MongoDB via built-in templates
+- **Auto-SSL** via Let's Encrypt through Traefik reverse proxy
 - **Multi-provider** — mix Hetzner, Vultr, and DigitalOcean in a single project
 - **Health checks** — endpoint monitoring, container health, disk/CPU/RAM alerts
 - **Per-service env vars** with runtime injection and masked output
@@ -113,7 +113,10 @@ hoist domain add api.myapp.com
 | Hetzner Cloud | Supported |
 | Vultr | Supported |
 | DigitalOcean | Supported |
-| Vercel, AWS, GCP, ... | Coming soon |
+| Hostinger | Supported |
+| Linode | Supported |
+| Scaleway | Supported |
+| AWS, GCP, ... | Coming soon |
 
 Started with VPS because it's the best value. Cloud platforms are next — same chat-based workflow, more deployment targets. More templates (queues, caches, search) are coming too.
 
@@ -129,8 +132,8 @@ Contributions welcome.
 ~/.hoist/
 ├── config.json          # Provider API keys, defaults
 └── keys/
-    ├── hoist_rsa         # SSH private key (auto-generated)
-    └── hoist_rsa.pub     # Uploaded to every server
+    ├── hoist_ed25519     # SSH private key (auto-generated)
+    └── hoist_ed25519.pub # Uploaded to every server
 ```
 
 ### In your project
@@ -147,7 +150,7 @@ my-project/
 ```
 Server (VPS)
 ├── Docker Engine          # Container runtime
-├── Caddy (container)      # Reverse proxy + auto-SSL
+├── Traefik (container)     # Reverse proxy + auto-SSL
 ├── App containers         # Your applications
 ├── Service containers     # Postgres, Redis, etc.
 ├── Docker volumes         # Persistent data
@@ -191,18 +194,19 @@ Everything runs in Docker. Containers talk over an internal network. Databases a
 
 ```bash
 hoist init                          # Set up Hoist + add a cloud provider
-hoist server create|import|list|status|destroy|ssh
+hoist server create|import|list|status|regions|types|stats|destroy|ssh
 hoist deploy [--service <name>]     # Build and deploy from Dockerfile
 hoist rollback --service <name>     # Instant rollback
-hoist template create|list|info|inspect|backup|destroy|start|stop|restart
+hoist deploy --template <type> --server <s>  # Deploy a database template
+hoist template list|info|inspect|services|backup|destroy|start|stop|restart|public|private
 hoist domain add|list|delete        # Custom domains + auto-SSL
 hoist env set|get|list|delete|import|export
 hoist logs <service> [--follow]     # Container logs
 hoist status                        # Full project overview
 hoist doctor                        # Health check everything
-hoist provider add|list|test|set-default|delete
+hoist provider add|list|test|update|set-default|delete
 hoist keys show|rotate
-hoist skill export                  # Package skills for publishing
+hoist config validate                # Validate hoist.json
 ```
 
 Update: `npm install -g hoist-cli@latest`
@@ -218,7 +222,7 @@ Hoist implements the [Agent Skills](https://agentskills.io) open standard. After
 | Claude Code | `~/.claude/skills/hoist/` |
 | Cursor | `~/.cursor/skills/hoist/` |
 | Gemini CLI | `~/.gemini/skills/hoist/` |
-| OpenCode | `~/.claude/skills/hoist/` or `~/.agents/skills/hoist/` |
+| OpenCode | `~/.config/opencode/skills/hoist/` |
 | Codex | `~/.agents/skills/hoist/` |
 
 Each skill includes `SKILL.md` (how to use Hoist), `COMMANDS.md` (full command reference), and `DOCKERFILES.md` (framework-specific Docker patterns for Next.js, Remix, Astro, Python, Go, Rust, and more).
@@ -246,7 +250,7 @@ Hoist is designed so your AI agent can manage infrastructure without ever seeing
 - **SSH key-only auth** — password login disabled on all managed servers
 - **UFW firewall** — only ports 22, 80, 443 open
 - **Network isolation** — databases and services talk over an internal Docker network, never exposed to the internet
-- **Caddy reverse proxy** — containers are only reachable through Caddy, never bound to public ports directly
+- **Traefik reverse proxy** — containers are only reachable through Traefik, never bound to public ports directly
 - **No secrets in git** — env vars injected at runtime, `env list` masks values in human mode
 
 ---

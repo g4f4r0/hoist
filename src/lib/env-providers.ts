@@ -1,13 +1,13 @@
 import type { ProviderConfig } from "./config.js";
+import { generateRandomName } from "./random-name.js";
 
-/**
- * Environment variable names mapped to provider types.
- * These allow non-interactive provider setup (e.g. via OpenClaw, CI/CD, or shell exports).
- */
-const ENV_MAP: Array<{ env: string; type: ProviderConfig["type"]; label: string }> = [
-  { env: "HOIST_HETZNER_API_KEY", type: "hetzner", label: "hetzner-1" },
-  { env: "HOIST_VULTR_API_KEY", type: "vultr", label: "vultr-1" },
-  { env: "HOIST_DIGITALOCEAN_API_KEY", type: "digitalocean", label: "digitalocean-1" },
+const ENV_MAP: Array<{ env: string; type: ProviderConfig["type"] }> = [
+  { env: "HOIST_HETZNER_API_KEY", type: "hetzner" },
+  { env: "HOIST_VULTR_API_KEY", type: "vultr" },
+  { env: "HOIST_DIGITALOCEAN_API_KEY", type: "digitalocean" },
+  { env: "HOIST_HOSTINGER_API_KEY", type: "hostinger" },
+  { env: "HOIST_LINODE_API_KEY", type: "linode" },
+  { env: "HOIST_SCALEWAY_API_KEY", type: "scaleway" },
 ];
 
 export interface DetectedProvider {
@@ -17,18 +17,14 @@ export interface DetectedProvider {
   env: string;
 }
 
-/**
- * Scans process.env for HOIST_*_API_KEY variables and returns
- * any detected provider credentials. Keys are never logged or
- * included in JSON output — they go straight into ~/.hoist/config.json
- * with 600 permissions.
- */
+/** Scans process.env for HOIST_*_API_KEY variables and returns detected provider credentials. */
 export function detectEnvProviders(): DetectedProvider[] {
   const found: DetectedProvider[] = [];
 
-  for (const { env, type, label } of ENV_MAP) {
+  for (const { env, type } of ENV_MAP) {
     const value = process.env[env];
     if (value && value.trim().length > 0) {
+      const label = generateRandomName();
       found.push({ type, apiKey: value.trim(), label, env });
     }
   }

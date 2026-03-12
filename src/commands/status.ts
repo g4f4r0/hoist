@@ -1,11 +1,10 @@
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
+
 import { loadProjectConfig, isAppService } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
-import { listRoutes } from "../lib/caddy.js";
+import { listRoutes } from "../lib/traefik.js";
 import { exec, closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
-import { outputJson, outputError, isJsonMode } from "../lib/output.js";
+import { outputResult, outputError } from "../lib/output.js";
 
 interface ContainerInfo {
   name: string;
@@ -35,7 +34,7 @@ interface ServiceStatus {
 async function getContainers(ssh: SSHConnectionOptions): Promise<ContainerInfo[]> {
   const result = await exec(
     ssh,
-    "docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}' --filter name=hoist-"
+    "docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}'"
   );
   if (result.code !== 0 || !result.stdout.trim()) return [];
 
@@ -50,7 +49,7 @@ async function getContainers(ssh: SSHConnectionOptions): Promise<ContainerInfo[]
   try {
     const stats = await exec(
       ssh,
-      "docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' --filter name=hoist-"
+      "docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'"
     );
     if (stats.code === 0 && stats.stdout.trim()) {
       const statMap = new Map<string, { cpu: string; memory: string }>();
@@ -66,7 +65,9 @@ async function getContainers(ssh: SSHConnectionOptions): Promise<ContainerInfo[]
         }
       }
     }
-  } catch {}
+  } catch {
+    // Stats are optional, ignore failures
+  }
 
   return containers;
 }
@@ -90,7 +91,6 @@ async function getDisk(
 export const statusCommand = new Command("status")
   .description("Show project status and drift detection")
   .action(async () => {
-    const json = isJsonMode();
     let config;
     try {
       config = loadProjectConfig();
@@ -111,7 +111,7 @@ export const statusCommand = new Command("status")
     const serviceStatuses: ServiceStatus[] = [];
     const drift: string[] = [];
     const allContainerNames = new Set<string>();
-    const routesByServer = new Map<string, Array<{ domain: string; upstream: string }>>();
+    const routesByServer = new Map<string, Array<{ appName: string; domain: string; upstream: string }>>();
 
     const seen = new Set<string>();
 
@@ -120,7 +120,7 @@ export const statusCommand = new Command("status")
 
       let containers: ContainerInfo[] = [];
       let disk = { size: "?", used: "?", avail: "?", percent: "?" };
-      let routes: Array<{ domain: string; upstream: string }> = [];
+      let routes: Array<{ appName: string; domain: string; upstream: string }> = [];
       let serverUp = true;
 
       if (!seen.has(info.ip)) {
@@ -150,10 +150,9 @@ export const statusCommand = new Command("status")
     }
 
     for (const [serviceName, service] of Object.entries(config.services)) {
-      const containerName = `hoist-${serviceName}`;
-      const running = allContainerNames.has(containerName);
+      const running = allContainerNames.has(serviceName);
       const routes = routesByServer.get(service.server) ?? [];
-      const route = routes.find((r) => r.upstream.startsWith(containerName));
+      const route = routes.find((r) => r.upstream.startsWith(serviceName));
 
       serviceStatuses.push({
         name: serviceName,
@@ -169,51 +168,17 @@ export const statusCommand = new Command("status")
       }
     }
 
-    for (const containerName of allContainerNames) {
-      const serviceName = containerName.replace(/^hoist-/, "");
-      if (!config.services[serviceName]) {
-        drift.push(`container '${containerName}' is running but not in config`);
+    for (const cName of allContainerNames) {
+      if (cName === "hoist-traefik") continue;
+      if (!config.services[cName]) {
+        drift.push(`container '${cName}' is running but not in config`);
       }
     }
 
-    const result = {
+    outputResult({
       project: config.project,
       servers: serverStatuses,
       services: serviceStatuses,
       drift,
-    };
-
-    if (json) {
-      outputJson(result);
-      return;
-    }
-
-    p.log.info(chalk.bold(`Project: ${config.project}`));
-    p.log.info("");
-
-    p.log.info(chalk.bold("Servers"));
-    for (const s of serverStatuses) {
-      const statusColor = s.status === "reachable" ? chalk.green(s.status) : chalk.red(s.status);
-      p.log.info(
-        `  ${chalk.bold(s.name)} ${chalk.dim(s.provider)} ${s.ip} ${statusColor} ${chalk.dim(`disk: ${s.disk.percent} used`)}`
-      );
-    }
-
-    p.log.info("");
-    p.log.info(chalk.bold("Services"));
-    for (const s of serviceStatuses) {
-      const statusColor = s.status === "running" ? chalk.green(s.status) : chalk.red(s.status);
-      const domainStr = s.domain ? chalk.cyan(s.domain) : chalk.dim("no domain");
-      p.log.info(
-        `  ${chalk.bold(s.name)} ${chalk.dim(s.type)} ${statusColor} ${chalk.dim("on")} ${s.server} ${domainStr}`
-      );
-    }
-
-    if (drift.length > 0) {
-      p.log.info("");
-      p.log.info(chalk.bold.yellow("Drift"));
-      for (const d of drift) {
-        p.log.info(`  ${chalk.yellow("!")} ${d}`);
-      }
-    }
+    });
   });

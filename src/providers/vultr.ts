@@ -39,6 +39,7 @@ async function apiJson<T>(
   return res.json() as Promise<T>;
 }
 
+/** Vultr provider implementation. */
 export const vultrProvider: Provider = {
   async testConnection(apiKey: string): Promise<ProviderTestResult> {
     try {
@@ -65,14 +66,18 @@ export const vultrProvider: Provider = {
         id: string;
         city: string;
         country: string;
+        options: string[];
       }>;
     }>("/regions", apiKey);
-    return data.regions.map((region) => ({
-      id: region.id,
-      name: `${region.city}, ${region.country}`,
-      city: region.city,
-      country: region.country,
-    }));
+    return data.regions
+      .filter((r) => r.options && r.options.length > 0)
+      .map((region) => ({
+        id: region.id,
+        name: `${region.city}, ${region.country}`,
+        city: region.city,
+        country: region.country,
+        available: true,
+      }));
   },
 
   async listServerTypes(apiKey: string): Promise<ServerTypeInfo[]> {
@@ -85,14 +90,18 @@ export const vultrProvider: Provider = {
         monthly_cost: number;
       }>;
     }>("/plans?type=vc2", apiKey);
-    return data.plans.map((plan) => ({
-      id: plan.id,
-      description: `${plan.vcpu_count} vCPU, ${plan.ram / 1024}GB RAM, ${plan.disk}GB disk`,
-      cpus: plan.vcpu_count,
-      memoryGb: plan.ram / 1024,
-      diskGb: plan.disk,
-      monthlyCost: `$${plan.monthly_cost}`,
-    }));
+    return data.plans
+      .map((plan) => ({
+        id: plan.id,
+        description: `${plan.vcpu_count} vCPU, ${plan.ram / 1024}GB RAM, ${plan.disk}GB disk`,
+        cpus: plan.vcpu_count,
+        memoryGb: plan.ram / 1024,
+        diskGb: plan.disk,
+        monthlyCostCents: Math.round(plan.monthly_cost * 100),
+        currency: "USD",
+        monthlyCost: `$${plan.monthly_cost}`,
+      }))
+      .sort((a, b) => a.monthlyCostCents - b.monthlyCostCents);
   },
 
   async createServer(
@@ -104,16 +113,21 @@ export const vultrProvider: Provider = {
       sshKeyPublic: string;
     }
   ): Promise<ServerInfo> {
-    const { ssh_keys } = await apiJson<{
-      ssh_keys: Array<{ id: string; ssh_key: string }>;
+    const { ssh_keys: sshKeys } = await apiJson<{
+      ssh_keys: Array<{ id: string; ssh_key: string; name: string }>;
     }>("/ssh-keys", apiKey);
 
-    let sshKeyId = ssh_keys.find(
+    let sshKeyId = sshKeys.find(
       (k) => k.ssh_key.trim() === opts.sshKeyPublic.trim()
     )?.id;
 
     if (!sshKeyId) {
-      const { ssh_key } = await apiJson<{ ssh_key: { id: string } }>(
+      const byName = sshKeys.find((k) => k.name === "hoist");
+      if (byName) {
+        await api(`/ssh-keys/${byName.id}`, apiKey, { method: "DELETE" });
+      }
+
+      const { ssh_key: created } = await apiJson<{ ssh_key: { id: string } }>(
         "/ssh-keys",
         apiKey,
         {
@@ -124,7 +138,7 @@ export const vultrProvider: Provider = {
           }),
         }
       );
-      sshKeyId = ssh_key.id;
+      sshKeyId = created.id;
     }
 
     const { instance } = await apiJson<{

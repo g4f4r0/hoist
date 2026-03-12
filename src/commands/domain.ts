@@ -1,11 +1,10 @@
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
+
 import { loadProjectConfig, isAppService, getOnlyAppService } from "../lib/project-config.js";
 import { resolveServer, resolveServers } from "../lib/server-resolve.js";
-import { addRoute, deleteRoute, listRoutes } from "../lib/caddy.js";
+import { addRoute, deleteRoute, listRoutes, isAutoDomain, parseWwwPair } from "../lib/traefik.js";
 import { closeConnection } from "../lib/ssh.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
+import { outputResult, outputError } from "../lib/output.js";
 
 export const domainCommand = new Command("domain").description(
   "Manage domains and routing"
@@ -21,8 +20,6 @@ domainCommand
       domain: string,
       opts: { service?: string }
     ) => {
-      const json = isJsonMode();
-
       let config;
       try {
         config = loadProjectConfig();
@@ -31,14 +28,13 @@ domainCommand
         process.exit(1);
       }
 
-      // Auto-detect service if not specified
       let serviceName = opts.service;
       if (!serviceName) {
         const only = getOnlyAppService(config);
         if (only) {
           serviceName = only[0];
         } else {
-          outputError("Multiple app services found. Use --service to specify one.");
+          outputError("Multiple app services found. Use --service to specify one.", undefined, { actor: "agent", action: "Re-run with --service to pick one.", command: "hoist domain add <domain> --service <name>" });
           process.exit(1);
         }
       }
@@ -65,7 +61,7 @@ domainCommand
       const ssh = { host: server.ip, port: 22, username: "root" };
 
       try {
-        await addRoute(ssh, domain, `hoist-${serviceName}:${service.port}`);
+        await addRoute(ssh, serviceName, domain, `${serviceName}:${service.port}`);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to add route");
         closeConnection(ssh);
@@ -74,20 +70,17 @@ domainCommand
 
       closeConnection(ssh);
 
-      const result = {
-        domain,
-        service: serviceName,
-        serverIp: server.ip,
-        note: `Point DNS A record to ${server.ip}`,
-      };
-
-      if (json) {
-        outputJson(result);
-      } else {
-        outputSuccess(
-          `Route added: ${chalk.bold(domain)} → ${chalk.bold(serviceName)}`
+      if (isAutoDomain(domain)) {
+        outputResult(
+          { domain, service: serviceName, serverIp: server.ip },
+          { actor: "user", action: `Point DNS A record for ${domain} to ${server.ip}. SSL will auto-provision via Let's Encrypt.` }
         );
-        p.log.info(chalk.dim(`Point DNS A record to ${server.ip}`));
+      } else {
+        const { canonical, alternate } = parseWwwPair(domain);
+        outputResult(
+          { domain: canonical, alternate, service: serviceName, serverIp: server.ip },
+          { actor: "user", action: `Point DNS A records for both ${canonical} and ${alternate} to ${server.ip}. The alternate will redirect to ${canonical}. SSL will auto-provision via Let's Encrypt.` }
+        );
       }
     }
   );
@@ -96,8 +89,6 @@ domainCommand
   .command("list")
   .description("List all domain routes")
   .action(async () => {
-    const json = isJsonMode();
-
     let config;
     try {
       config = loadProjectConfig();
@@ -115,7 +106,7 @@ domainCommand
     }
 
     const seen = new Set<string>();
-    const allRoutes: Array<{ domain: string; upstream: string; server: string }> = [];
+    const allRoutes: Array<{ appName: string; domain: string; upstream: string; server: string }> = [];
 
     for (const [serverName, info] of Object.entries(resolved)) {
       if (seen.has(info.ip)) continue;
@@ -127,44 +118,33 @@ domainCommand
         for (const route of routes) {
           allRoutes.push({ ...route, server: serverName });
         }
-      } catch (err) {
-        if (!json) {
-          p.log.warning(
-            `Failed to list routes on ${serverName}: ${err instanceof Error ? err.message : err}`
-          );
-        }
+      } catch {
+        // Skip servers that fail
       }
       closeConnection(ssh);
     }
 
-    if (json) {
-      outputJson(allRoutes);
-      return;
-    }
-
-    if (allRoutes.length === 0) {
-      p.log.info("No domain routes configured.");
-      return;
-    }
-
-    for (const route of allRoutes) {
-      p.log.info(
-        `${chalk.bold(route.domain)} → ${chalk.dim(route.upstream)} ${chalk.dim("on")} ${route.server}`
-      );
-    }
+    outputResult(allRoutes);
   });
 
 domainCommand
   .command("delete")
   .description("Delete a domain route")
   .argument("<domain>", "Domain name")
+  .option("--confirm", "Confirm destructive action")
   .action(
     async (
       domain: string,
-      opts: { }
+      opts: { confirm?: boolean }
     ) => {
-      const json = isJsonMode();
-      const yes = isAutoConfirm();
+      if (!opts.confirm) {
+        outputError(
+          `Destructive action: this will delete the route for domain '${domain}'. Re-run with --confirm to proceed.`,
+          undefined,
+          { actor: "agent", action: "Re-run with --confirm if the user approves.", command: `hoist domain delete ${domain} --confirm` }
+        );
+        process.exit(1);
+      }
 
       let config;
       try {
@@ -184,6 +164,7 @@ domainCommand
 
       let targetServer: string | null = null;
       let targetIp = "";
+      let targetAppName = "";
       const seen = new Set<string>();
 
       for (const [serverName, info] of Object.entries(resolved)) {
@@ -193,29 +174,26 @@ domainCommand
         const ssh = { host: info.ip, port: 22, username: "root" };
         try {
           const routes = await listRoutes(ssh);
-          if (routes.some((r) => r.domain === domain)) {
+          const match = routes.find((r) => r.domain === domain);
+          if (match) {
             targetServer = serverName;
             targetIp = info.ip;
+            targetAppName = match.appName;
           }
-        } catch {}
+        } catch {
+          // Skip servers that fail
+        }
         closeConnection(ssh);
       }
 
-      if (!targetServer) {
+      if (!targetServer || !targetAppName) {
         outputError(`No route found for "${domain}" on any server`);
         process.exit(1);
       }
 
-      if (!yes && !json) {
-        const confirmed = await p.confirm({
-          message: `Delete route for "${domain}" from ${targetServer}?`,
-        });
-        if (p.isCancel(confirmed) || !confirmed) return;
-      }
-
       const ssh = { host: targetIp, port: 22, username: "root" };
       try {
-        await deleteRoute(ssh, domain);
+        await deleteRoute(ssh, targetAppName);
       } catch (err) {
         outputError(err instanceof Error ? err.message : "Failed to delete route");
         closeConnection(ssh);
@@ -224,10 +202,6 @@ domainCommand
 
       closeConnection(ssh);
 
-      if (json) {
-        outputJson({ status: "deleted", domain, server: targetServer });
-      } else {
-        outputSuccess(`Route for "${domain}" deleted from ${targetServer}`);
-      }
+      outputResult({ status: "deleted", domain, server: targetServer });
     }
   );

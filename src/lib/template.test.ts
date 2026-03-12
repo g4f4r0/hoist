@@ -27,9 +27,9 @@ describe("generatePassword", () => {
 });
 
 describe("resolveTemplate", () => {
-  it("resolves container name with hoist prefix", () => {
+  it("resolves container name to service name", () => {
     const result = resolveTemplate(postgres, "mydb");
-    expect(result.containerName).toBe("hoist-mydb");
+    expect(result.containerName).toBe("mydb");
   });
 
   it("resolves image with default version", () => {
@@ -66,7 +66,7 @@ describe("resolveTemplate", () => {
   it("resolves {{env:*}} in connectionString", () => {
     const result = resolveTemplate(postgres, "mydb");
     expect(result.connectionString).toContain("hoist:");
-    expect(result.connectionString).toContain("hoist-mydb");
+    expect(result.connectionString).toContain("mydb");
     expect(result.connectionString).toContain("5432");
     expect(result.connectionString).toContain("/app");
     expect(result.connectionString).not.toContain("{{");
@@ -74,19 +74,19 @@ describe("resolveTemplate", () => {
 
   it("resolves {{container}} in connectionString", () => {
     const result = resolveTemplate(postgres, "mydb");
-    expect(result.connectionString).toContain("hoist-mydb:");
+    expect(result.connectionString).toContain("mydb:");
   });
 
   it("maps volumes with service name prefix", () => {
     const result = resolveTemplate(postgres, "mydb");
-    expect(result.volumes["/var/lib/postgresql/data"]).toBe("hoist-mydb-data");
+    expect(result.volumes["/var/lib/postgresql/data"]).toBe("mydb-data");
   });
 
   it("sets labels", () => {
     const result = resolveTemplate(postgres, "mydb");
     expect(result.labels).toEqual({
       "managed-by": "hoist",
-      "hoist-service": "mydb",
+      "hoist.service": "mydb",
     });
   });
 

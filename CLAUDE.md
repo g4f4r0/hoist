@@ -15,15 +15,15 @@ npm run typecheck      # tsc --noEmit (strict mode)
 node dist/cli.js       # Run the CLI directly
 ```
 
-No test framework is configured yet. No ESLint config exists yet (script defined but no config file).
+Tests use Vitest: `npm test` runs all tests, `npm run test:watch` for watch mode. No ESLint config exists yet (script defined but no config file).
 
 ## Architecture
 
-**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `rollback`, `domain`, `status`, `template`, `env`, `logs`, `doctor`, `sync`, `update`, `keys`, `config`.
+**Entry point:** `src/cli.ts` registers command groups via Commander.js → `init`, `provider`, `server`, `deploy`, `rollback`, `domain`, `status`, `template`, `env`, `logs`, `doctor`, `keys`, `config`.
 
 **Three layers:**
 
-1. **Commands** (`src/commands/`) — User-facing CLI commands. Use `@clack/prompts` for interactive flows, support `--json` for machine output, `--yes` to skip confirmations. Commands resolve providers, gather params (interactively or via flags), then call into lib/providers.
+1. **Commands** (`src/commands/`) — User-facing CLI commands. Auto-detect TTY: interactive prompts via `@clack/prompts` in terminals, structured JSON output for agents. Commands resolve providers, gather params (interactively or via flags/env vars), then call into lib/providers.
 
 2. **Lib** (`src/lib/`) — Shared infrastructure: config I/O, SSH connection pool, key generation, server setup, structured output.
 
@@ -119,16 +119,16 @@ These tables are guidance for domain operations, not an exhaustive allowlist. St
 
 - **hoist.json is read-only input**: CLI reads and validates it, never writes it. The agent creates/updates hoist.json. Types and loader in `src/lib/project-config.ts`.
 - **Server resolution**: hoist.json server names are resolved to IPs via provider API calls. No local IP cache. See `src/lib/server-resolve.ts`.
-- **Zero-downtime deploys**: Build new image → start `-new` container → health check → swap Caddy → stop old → rename. Supports local upload or git clone (`--repo`). See `src/lib/deploy.ts`.
+- **Zero-downtime deploys**: Build new image → start `-new` container → health check → swap Traefik route → stop old → rename. Supports local upload or git clone (`--repo`). See `src/lib/deploy.ts`.
 - **Rollback**: Swaps `:latest` and `:previous` image tags, recreates container. See `src/commands/rollback.ts`.
-- **Caddy config via admin API**: Routes managed by reading/writing Caddy JSON config through `docker exec wget` over SSH. See `src/lib/caddy.ts`.
+- **Traefik file-based routing**: Routes managed by writing YAML config files to `/etc/traefik/dynamic/` via SSH. One file per app. See `src/lib/traefik.ts`.
 - **Template system**: Built-in templates in `src/lib/templates/` define how to run Docker services (image, env, volumes, health check, connection string). `{{generate:password}}` and `{{env:KEY}}` variables resolved at deploy time. Same schema for databases and future app templates.
 - **Container env management**: Read env via `docker inspect`, update by stop/rm/run with new env (Docker doesn't support live env updates). See `src/lib/container-env.ts`.
 - **All provider API helpers** follow the same shape: `api()` returns raw Response, `apiJson<T>()` returns parsed and throws on auth errors.
 - **Server setup is idempotent**: Uses `which X || install X` and `docker inspect X || docker run X` patterns so it can be re-run safely.
 - **Smart server defaulting**: Commands with `--server` auto-pick the only server if config has just one. Use `getDefaultServer()` from project-config.ts.
 - **Stateless design**: No local database. Server list comes from provider APIs (filtered by hoist tags). Server state comes from SSH. Config is just credentials and defaults.
-- **Dual-mode output**: `--json` sends structured JSON to stdout. Human output goes to stderr via chalk. Every command supports both.
+- **AI-native output**: Auto-detects TTY. Non-TTY (agents) get structured NDJSON to stdout, no prompts. TTY (humans) get interactive prompts and formatted output via chalk.
 
 ## QA Feedback Loops
 

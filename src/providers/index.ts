@@ -2,6 +2,18 @@ import type { ProviderConfig } from "../lib/config.js";
 import { hetznerProvider } from "./hetzner.js";
 import { vultrProvider } from "./vultr.js";
 import { digitaloceanProvider } from "./digitalocean.js";
+import { hostingerProvider } from "./hostinger.js";
+import { linodeProvider } from "./linode.js";
+import { scalewayProvider } from "./scaleway.js";
+
+export const PROVIDER_TYPES = [
+  { value: "hetzner", label: "Hetzner" },
+  { value: "vultr", label: "Vultr" },
+  { value: "digitalocean", label: "DigitalOcean" },
+  { value: "hostinger", label: "Hostinger" },
+  { value: "linode", label: "Linode" },
+  { value: "scaleway", label: "Scaleway" },
+] as const;
 
 export interface ProviderTestResult {
   ok: boolean;
@@ -24,6 +36,8 @@ export interface ServerTypeInfo {
   cpus: number;
   memoryGb: number;
   diskGb: number;
+  monthlyCostCents: number;
+  currency: string;
   monthlyCost: string;
 }
 
@@ -32,6 +46,7 @@ export interface RegionInfo {
   name: string;
   city: string;
   country: string;
+  available: boolean;
 }
 
 export interface Provider {
@@ -56,6 +71,9 @@ const providers: Record<ProviderConfig["type"], Provider> = {
   hetzner: hetznerProvider,
   vultr: vultrProvider,
   digitalocean: digitaloceanProvider,
+  hostinger: hostingerProvider,
+  linode: linodeProvider,
+  scaleway: scalewayProvider,
 };
 
 /** Returns the provider implementation for the given type. */

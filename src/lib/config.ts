@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 
 export interface ProviderConfig {
-  type: "hetzner" | "vultr" | "digitalocean";
+  type: "hetzner" | "vultr" | "digitalocean" | "hostinger" | "linode" | "scaleway";
   apiKey: string;
 }
 

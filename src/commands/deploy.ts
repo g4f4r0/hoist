@@ -1,12 +1,13 @@
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
 
-import { loadProjectConfig, isAppService, type AppServiceConfig } from "../lib/project-config.js";
-import { resolveServers } from "../lib/server-resolve.js";
+import { loadProjectConfig, isAppService, getDefaultServer, type AppServiceConfig } from "../lib/project-config.js";
+import { resolveServer, resolveServers } from "../lib/server-resolve.js";
 import { closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { deployService } from "../lib/deploy.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
+import { createDatabase, formatSshTunnel } from "../lib/database.js";
+import { getTemplate } from "../lib/templates/index.js";
+import { generateRandomName } from "../lib/random-name.js";
+import { outputResult, outputError, outputProgress } from "../lib/output.js";
 
 interface DeployResult {
   service: string;
@@ -20,11 +21,18 @@ interface DeployResult {
 export const deployCommand = new Command("deploy")
   .description("Deploy services to servers")
   .option("--service <name>", "Deploy a specific service")
+  .option("--template <type>", "Deploy a template service (e.g. postgres, redis)")
+  .option("--name <name>", "Name for the template instance (used with --template)")
+  .option("--server <server>", "Target server (used with --template)")
+  .option("--version <version>", "Template version override (used with --template)")
+  .option("--public", "Expose template service port publicly")
   .option("--repo <url>", "Deploy from a git repository URL")
   .option("--branch <branch>", "Git branch to deploy", "main")
-  .action(async (opts: { service?: string; repo?: string; branch: string }) => {
-    const json = isJsonMode();
-    const yes = isAutoConfirm();
+  .action(async (opts: { service?: string; template?: string; name?: string; server?: string; version?: string; public?: boolean; repo?: string; branch: string }) => {
+    if (opts.template) {
+      await deployTemplate(opts.template, opts.name, opts.server, opts.version, opts.public);
+      return;
+    }
 
     let config;
     try {
@@ -52,23 +60,8 @@ export const deployCommand = new Command("deploy")
         process.exit(1);
       }
       servicesToDeploy = [match];
-    } else if (appServices.length === 1) {
-      // Single app service — auto-select
-      servicesToDeploy = appServices;
-    } else if (json || yes) {
-      // Multiple services, non-interactive — deploy all
-      servicesToDeploy = appServices;
     } else {
-      const selected = await p.select({
-        message: "Select a service to deploy:",
-        options: appServices.map(([name, svc]) => ({
-          value: name,
-          label: `${name} → ${svc.server}${svc.domain ? ` (${svc.domain})` : ""}`,
-        })),
-      });
-      if (p.isCancel(selected)) return;
-      const match = appServices.find(([name]) => name === selected)!;
-      servicesToDeploy = [match];
+      servicesToDeploy = appServices;
     }
 
     let resolved;
@@ -77,17 +70,6 @@ export const deployCommand = new Command("deploy")
     } catch (err) {
       outputError(err instanceof Error ? err.message : "Failed to resolve servers");
       process.exit(1);
-    }
-
-    if (!yes && !json) {
-      const lines = servicesToDeploy.map(([name, svc]) => {
-        const server = resolved[svc.server];
-        return `  ${chalk.bold(name)} → ${svc.server} (${server.ip})${svc.domain ? ` — ${svc.domain}` : ""}`;
-      });
-      const confirmed = await p.confirm({
-        message: `Deploy the following?\n${lines.join("\n")}`,
-      });
-      if (p.isCancel(confirmed) || !confirmed) return;
     }
 
     const results: DeployResult[] = [];
@@ -100,8 +82,7 @@ export const deployCommand = new Command("deploy")
         username: "root",
       };
 
-      const spinner = p.spinner();
-      if (!json) spinner.start(`Deploying ${chalk.bold(name)}...`);
+      outputProgress("deploy", `Deploying ${name}`);
 
       try {
         const result = await deployService({
@@ -112,14 +93,12 @@ export const deployCommand = new Command("deploy")
           repo: opts.repo,
           branch: opts.branch,
           onLog: (msg) => {
-            if (!json) spinner.message(msg);
+            outputProgress("deploy", msg);
           },
         });
-        if (!json) spinner.stop(chalk.green(`${name} deployed — ${result.status}`));
         results.push(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Deploy failed";
-        if (!json) spinner.stop(chalk.red(`${name} failed: ${message}`));
         results.push({
           service: name,
           server: service.server,
@@ -134,17 +113,108 @@ export const deployCommand = new Command("deploy")
     }
 
     const failed = results.filter((r) => r.status === "failed");
-
-    if (json) {
-      outputJson(results);
-      if (failed.length > 0) process.exit(1);
-      return;
-    }
-
     if (failed.length > 0) {
-      outputError(`${failed.length} service(s) failed to deploy`);
+      outputResult(results);
       process.exit(1);
     }
 
-    outputSuccess(`${results.length} service(s) deployed successfully`);
+    outputResult(results, { actor: "agent", action: "Check status or add a custom domain.", command: "hoist status" });
   });
+
+async function deployTemplate(
+  templateType: string,
+  name: string | undefined,
+  serverFlag: string | undefined,
+  version: string | undefined,
+  isPublic?: boolean
+): Promise<void> {
+  try {
+    getTemplate(templateType);
+  } catch {
+    outputError(`Template "${templateType}" not found`);
+    process.exit(3);
+  }
+
+  const serviceName = name ?? generateRandomName();
+
+  let config;
+  try {
+    config = loadProjectConfig();
+  } catch (err) {
+    outputError(err instanceof Error ? err.message : "Failed to load project config");
+    process.exit(1);
+  }
+
+  let serverName = serverFlag;
+  if (!serverName) {
+    try {
+      serverName = getDefaultServer(config);
+    } catch {
+      outputError("Multiple servers. Use --server to specify one.");
+      process.exit(1);
+    }
+  }
+
+  const serverConfig = config.servers[serverName];
+  if (!serverConfig) {
+    outputError(`Server "${serverName}" not found in hoist.json`);
+    process.exit(1);
+  }
+
+  let server;
+  try {
+    server = await resolveServer(serverName, serverConfig);
+  } catch (err) {
+    outputError(err instanceof Error ? err.message : "Failed to resolve server");
+    process.exit(1);
+  }
+
+  const ssh: SSHConnectionOptions = {
+    host: server.ip,
+    port: 22,
+    username: "root",
+  };
+
+  outputProgress("template", `Creating ${templateType} service "${serviceName}"`);
+
+  try {
+    const result = await createDatabase({
+      ssh,
+      serviceName,
+      templateName: templateType,
+      version,
+      public: isPublic,
+      onLog: (msg) => {
+        outputProgress("template", msg);
+      },
+    });
+
+    const sshTunnel = formatSshTunnel(server.ip, result.container, result.port);
+
+    const output: Record<string, unknown> = {
+      service: result.service,
+      type: result.type,
+      version: result.version,
+      connectionString: result.connectionString,
+      sshTunnel,
+      public: result.public,
+      status: result.status,
+      server: serverName,
+    };
+
+    if (result.publicConnectionString) {
+      output.publicConnectionString = result.publicConnectionString;
+    }
+
+    const connStr = result.publicConnectionString || result.connectionString;
+    outputResult(
+      output,
+      { actor: "agent", action: "Set the connection string as an env var on your app.", command: `hoist env set <service> DATABASE_URL=${connStr}` }
+    );
+  } catch (err) {
+    outputError("Service creation failed", err instanceof Error ? err.message : err);
+    process.exit(1);
+  } finally {
+    closeConnection(ssh);
+  }
+}

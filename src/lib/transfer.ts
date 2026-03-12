@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 
 import { getConnection, type SSHConnectionOptions } from "./ssh.js";
 
@@ -12,10 +12,10 @@ export async function uploadDirectory(
   exclude?: string[]
 ): Promise<void> {
   const excludes = [...DEFAULT_EXCLUDES, ...(exclude ?? [])];
-  const excludeArgs = excludes.flatMap((e) => ["--exclude", e]);
+  const excludeArgs = excludes.map((e) => `--exclude ${e}`).join(" ");
 
-  const tar = spawn("tar", ["czf", "-", "-C", localDir, ...excludeArgs, "."], {
-    stdio: ["ignore", "pipe", "pipe"],
+  const tarBuffer = execSync(`tar czf - -C ${localDir} ${excludeArgs} .`, {
+    maxBuffer: 500 * 1024 * 1024,
   });
 
   const conn = await getConnection(ssh);
@@ -25,29 +25,15 @@ export async function uploadDirectory(
       `mkdir -p ${remoteDir} && tar xzf - -C ${remoteDir}`,
       (err, stream) => {
         if (err) {
-          tar.kill();
           reject(new Error(`Failed to start remote tar: ${err.message}`));
           return;
         }
 
         let stderr = "";
 
-        tar.stdout.pipe(stream);
-
-        tar.stderr.on("data", (data: Buffer) => {
-          stderr += data.toString();
-        });
-
-        tar.on("error", (error) => {
-          stream.close();
-          reject(new Error(`Local tar failed: ${error.message}`));
-        });
-
-        stream.on("close", (code: number) => {
+        stream.on("exit", (code: number) => {
           if (code !== 0) {
-            reject(
-              new Error(`Remote tar failed (exit ${code}): ${stderr}`)
-            );
+            reject(new Error(`Remote tar failed (exit ${code}): ${stderr}`));
             return;
           }
           resolve();
@@ -56,6 +42,8 @@ export async function uploadDirectory(
         stream.stderr.on("data", (data: Buffer) => {
           stderr += data.toString();
         });
+
+        stream.end(tarBuffer);
       }
     );
   });

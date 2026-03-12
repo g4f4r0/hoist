@@ -1,14 +1,12 @@
 import { Command } from "commander";
-import * as p from "@clack/prompts";
-import chalk from "chalk";
 
-import { loadProjectConfig, isAppService, getOnlyAppService, type AppServiceConfig } from "../lib/project-config.js";
+import { loadProjectConfig, isAppService, type AppServiceConfig } from "../lib/project-config.js";
 import { resolveServers } from "../lib/server-resolve.js";
 import { exec, execOrFail, closeConnection, type SSHConnectionOptions } from "../lib/ssh.js";
 import { containerName, imageName, buildDockerRunCmd, checkContainerHealth } from "../lib/container.js";
 import { listEnv } from "../lib/container-env.js";
-import { updateRouteUpstream } from "../lib/caddy.js";
-import { outputJson, outputError, outputSuccess, isJsonMode, isAutoConfirm } from "../lib/output.js";
+import { updateRouteUpstream, generateAutoDomain } from "../lib/traefik.js";
+import { outputResult, outputError, outputProgress } from "../lib/output.js";
 
 interface RollbackResult {
   service: string;
@@ -83,20 +81,16 @@ async function rollbackService(
   log("Checking container health");
   await checkContainerHealth(ssh, name, service.port, service.healthCheck);
 
-  if (service.domain) {
-    log(`Updating Caddy route to ${name}:${service.port}`);
-    await updateRouteUpstream(ssh, service.domain, `${name}:${service.port}`);
-  }
+  const domain = service.domain ?? generateAutoDomain(serviceName, ssh.host);
+  log(`Updating route to ${name}:${service.port}`);
+  await updateRouteUpstream(ssh, serviceName, `${name}:${service.port}`);
 }
 
 export const rollbackCommand = new Command("rollback")
   .description("Roll back a service to its previous deployment")
-  .option("--service <name>", "Service to roll back")
+  .option("--service <name>", "Service to roll back (required when multiple)")
   .option("--server <server>", "Server name filter")
   .action(async (opts: { service?: string; server?: string }) => {
-    const json = isJsonMode();
-    const yes = isAutoConfirm();
-
     let config;
     try {
       config = loadProjectConfig();
@@ -128,21 +122,10 @@ export const rollbackCommand = new Command("rollback")
       }
       target = match;
     } else if (appServices.length === 1) {
-      // Single app service — auto-select
       target = appServices[0];
-    } else if (json || yes) {
-      outputError("Multiple app services found. Use --service to specify one.");
-      process.exit(1);
     } else {
-      const selected = await p.select({
-        message: "Select a service to roll back:",
-        options: appServices.map(([name, svc]) => ({
-          value: name,
-          label: `${name} → ${svc.server}${svc.domain ? ` (${svc.domain})` : ""}`,
-        })),
-      });
-      if (p.isCancel(selected)) return;
-      target = appServices.find(([name]) => name === selected)!;
+      outputError("Multiple app services found. Use --service to specify one.", undefined, { actor: "agent", action: "Re-run with --service to pick one.", command: "hoist rollback --service <name>" });
+      process.exit(1);
     }
 
     const [serviceName, service] = target;
@@ -162,26 +145,15 @@ export const rollbackCommand = new Command("rollback")
       username: "root",
     };
 
-    if (!yes && !json) {
-      const confirmed = await p.confirm({
-        message: `Roll back ${chalk.bold(serviceName)} on ${service.server} (${server.ip}) to its previous image?`,
-      });
-      if (p.isCancel(confirmed) || !confirmed) return;
-    }
-
-    const spinner = p.spinner();
-    if (!json) spinner.start(`Rolling back ${chalk.bold(serviceName)}...`);
+    outputProgress("rollback", `Rolling back ${serviceName}`);
 
     try {
       await rollbackService(ssh, serviceName, service, (msg) => {
-        if (!json) spinner.message(msg);
+        outputProgress("rollback", msg);
       });
 
-      const url = service.domain ? `https://${service.domain}` : `http://${ssh.host}:${service.port}`;
-
-      if (!json) {
-        spinner.stop(chalk.green(`${serviceName} rolled back successfully`));
-      }
+      const domain = service.domain ?? generateAutoDomain(serviceName, ssh.host);
+      const url = `https://${domain}`;
 
       const result: RollbackResult = {
         service: serviceName,
@@ -191,14 +163,9 @@ export const rollbackCommand = new Command("rollback")
         url,
       };
 
-      if (json) {
-        outputJson(result);
-      } else {
-        outputSuccess(`${serviceName} rolled back to previous image`);
-      }
+      outputResult(result, { actor: "agent", action: "Verify the rollback.", command: "hoist status" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Rollback failed";
-      if (!json) spinner.stop(chalk.red(`${serviceName} failed: ${message}`));
 
       const result: RollbackResult = {
         service: serviceName,
@@ -209,11 +176,7 @@ export const rollbackCommand = new Command("rollback")
         error: message,
       };
 
-      if (json) {
-        outputJson(result);
-      } else {
-        outputError(message);
-      }
+      outputResult(result);
       process.exit(1);
     } finally {
       closeConnection(ssh);

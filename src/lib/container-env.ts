@@ -25,7 +25,7 @@ const DOCKER_INTERNAL_VARS = new Set([
 ]);
 
 function containerName(serviceName: string): string {
-  return `hoist-${serviceName}`;
+  return serviceName;
 }
 
 /** Reads environment variables from a running container, filtering Docker internals. */

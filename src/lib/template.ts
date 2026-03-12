@@ -43,7 +43,7 @@ export function resolveTemplate(
   serviceName: string,
   version?: string,
 ): ResolvedTemplate {
-  const containerName = `hoist-${serviceName}`;
+  const containerName = serviceName;
   const resolvedVersion = version ?? template.defaultVersion;
 
   const resolveFirstPass = (value: string): string => {
@@ -78,7 +78,7 @@ export function resolveTemplate(
 
   const volumes: Record<string, string> = {};
   for (const [mountPath, suffix] of Object.entries(template.volumes)) {
-    volumes[mountPath] = `hoist-${serviceName}-${suffix}`;
+    volumes[mountPath] = `${serviceName}-${suffix}`;
   }
 
   return {
@@ -92,7 +92,7 @@ export function resolveTemplate(
     healthCheck,
     labels: {
       "managed-by": "hoist",
-      "hoist-service": serviceName,
+      "hoist.service": serviceName,
     },
   };
 }

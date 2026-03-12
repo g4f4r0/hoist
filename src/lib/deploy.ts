@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { exec, execOrFail, type SSHConnectionOptions } from "./ssh.js";
 import { uploadDirectory } from "./transfer.js";
-import { addRoute, updateRouteUpstream } from "./caddy.js";
+import { addRoute, updateRouteUpstream, generateAutoDomain } from "./traefik.js";
 import { containerName, imageName, buildDockerRunCmd, checkContainerHealth } from "./container.js";
 import type { AppServiceConfig } from "./project-config.js";
 
@@ -100,6 +100,8 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
   const buildDir = `/tmp/hoist-build-${serviceName}-${timestamp}`;
   const dockerfile = service.dockerfile ?? "Dockerfile";
 
+  const domain = service.domain ?? generateAutoDomain(serviceName, ssh.host);
+
   let env: Record<string, string> = {};
   if (service.env_file) {
     const envPath = path.resolve(sourceDir, service.env_file);
@@ -114,14 +116,18 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
     await uploadDirectory(ssh, sourceDir, buildDir);
   }
 
+  const firstDeploy = await isFirstDeploy(ssh, serviceName);
+
+  if (!firstDeploy) {
+    await exec(ssh, `docker tag ${image} ${imageName(serviceName)}:previous`);
+  }
+
   log(`Building image ${image}`);
   await execOrFail(
     ssh,
     `docker build -t ${image} -f ${buildDir}/${dockerfile} ${buildDir}`,
     (data) => log(data)
   );
-
-  const firstDeploy = await isFirstDeploy(ssh, serviceName);
 
   try {
     if (firstDeploy) {
@@ -132,9 +138,9 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
       log("Checking container health");
       await checkContainerHealth(ssh, name, service.port, service.healthCheck);
 
-      if (service.domain && service.port) {
-        log(`Configuring route: ${service.domain} → ${name}:${service.port}`);
-        await addRoute(ssh, service.domain, `${name}:${service.port}`);
+      if (service.port) {
+        log(`Configuring route: ${domain} → ${name}:${service.port}`);
+        await addRoute(ssh, serviceName, domain, `${name}:${service.port}`);
       }
     } else {
       log("Redeploying with zero-downtime swap");
@@ -149,9 +155,9 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
       log("Checking new container health");
       await checkContainerHealth(ssh, newContainer, service.port, service.healthCheck);
 
-      if (service.domain && service.port) {
-        log(`Swapping Caddy route to ${newContainer}:${service.port}`);
-        await updateRouteUpstream(ssh, service.domain, `${newContainer}:${service.port}`);
+      if (service.port) {
+        log(`Swapping route to ${newContainer}:${service.port}`);
+        await updateRouteUpstream(ssh, serviceName, `${newContainer}:${service.port}`);
       }
 
       log("Stopping old container");
@@ -161,12 +167,11 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
       log("Renaming new container to live");
       await execOrFail(ssh, `docker rename ${newContainer} ${name}`);
 
-      if (service.domain && service.port) {
-        log(`Updating Caddy route to final name: ${name}:${service.port}`);
-        await updateRouteUpstream(ssh, service.domain, `${name}:${service.port}`);
+      if (service.port) {
+        log(`Updating route to final name: ${name}:${service.port}`);
+        await updateRouteUpstream(ssh, serviceName, `${name}:${service.port}`);
       }
 
-      await exec(ssh, `docker tag ${image} ${imageName(serviceName)}:previous`);
     }
   } finally {
     log("Cleaning up build directory");
@@ -179,7 +184,7 @@ export async function deployService(opts: DeployOptions): Promise<DeployResult> 
   );
   const running = status.code === 0 && status.stdout.trim() === "running";
 
-  const url = service.domain ? `https://${service.domain}` : service.port ? `http://${ssh.host}:${service.port}` : `ssh://${ssh.host}`;
+  const url = `https://${domain}`;
 
   return {
     service: serviceName,

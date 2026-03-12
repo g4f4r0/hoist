@@ -12,23 +12,15 @@ import { templateCommand } from "./commands/template.js";
 import { envCommand } from "./commands/env.js";
 import { logsCommand } from "./commands/logs.js";
 import { rollbackCommand } from "./commands/rollback.js";
-
 import { keysCommand } from "./commands/keys.js";
 import { configCommand } from "./commands/config.js";
-import { skillCommand } from "./commands/skill.js";
 import { closeAll } from "./lib/ssh.js";
-import { checkForUpdate } from "./lib/version-check.js";
 import { showStatus } from "./lib/status-check.js";
-import { setJsonMode, setAutoConfirm } from "./lib/output.js";
+import { outputProgress } from "./lib/output.js";
+import { checkForUpdate } from "./lib/version-check.js";
 
 declare const __VERSION__: string;
 const VERSION = __VERSION__;
-
-// Non-TTY = agent calling us. Auto-enable JSON output and skip confirmations.
-if (!process.stdout.isTTY) {
-  setJsonMode(true);
-  setAutoConfirm(true);
-}
 
 const program = new Command();
 
@@ -51,10 +43,8 @@ program.addCommand(templateCommand);
 program.addCommand(envCommand);
 program.addCommand(logsCommand);
 program.addCommand(rollbackCommand);
-
 program.addCommand(keysCommand);
 program.addCommand(configCommand);
-program.addCommand(skillCommand);
 
 process.on("SIGINT", () => {
   closeAll();
@@ -64,6 +54,17 @@ process.on("SIGTERM", () => {
   closeAll();
   process.exit(143);
 });
+
+if (process.stderr.isTTY) {
+  const taglines = [
+    "your agent's favorite ops tool.",
+    "because you have better things to do than SSH.",
+    "infrastructure that doesn't need a PhD.",
+    "your YAML days are over.",
+  ];
+  const tagline = taglines[Math.floor(Math.random() * taglines.length)];
+  process.stderr.write(`${chalk.bold("Hoist")} ${chalk.dim(VERSION)} ${chalk.dim("—")} ${tagline}\n\n`);
+}
 
 if (process.argv.includes("--status")) {
   await showStatus(VERSION);
@@ -76,10 +77,6 @@ program.parse();
 
 updateCheck.then((result) => {
   if (result?.updateAvailable) {
-    console.error(
-      chalk.yellow(
-        `\nUpdate available: ${result.current} \u2192 ${result.latest}\nRun: npm install -g hoist-cli`
-      )
-    );
+    outputProgress("update", `Update available: ${result.current} → ${result.latest}. Run: npm install -g hoist-cli`);
   }
 });
