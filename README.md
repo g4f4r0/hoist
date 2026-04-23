@@ -207,6 +207,7 @@ hoist doctor                        # Health check everything
 hoist provider add|list|test|update|set-default|delete
 hoist keys show|rotate
 hoist config validate                # Validate hoist.json
+hoist skills sync|export             # Sync local skills or build a publishable bundle
 ```
 
 Update: `npm install -g hoist-cli@latest`
@@ -224,10 +225,18 @@ Hoist implements the [Agent Skills](https://agentskills.io) open standard. After
 | Gemini CLI | `~/.gemini/skills/hoist/` |
 | OpenCode | `~/.config/opencode/skills/hoist/` |
 | Codex | `~/.agents/skills/hoist/` |
+| OpenClaw local workspace | `~/.openclaw/workspace/skills/hoist/` |
 
 Each skill includes `SKILL.md` (how to use Hoist), `COMMANDS.md` (full command reference), and `DOCKERFILES.md` (framework-specific Docker patterns for Next.js, Remix, Astro, Python, Go, Rust, and more).
 
 Any agent that supports the Agent Skills standard will pick up Hoist automatically — no manual configuration needed.
+
+To build a publishable OpenClaw and ClawHub bundle from this repo:
+
+```bash
+npm run build:skills
+clawhub skill publish ./skills/hoist --slug hoist --name "Hoist" --version 0.1.5 --tags latest
+```
 
 ---
 

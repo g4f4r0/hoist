@@ -1,16 +1,14 @@
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { writeAgentConfig } from "./agent-config.js";
+import { writeAgentConfig, writePublishedSkillBundle } from "./agent-config.js";
 
-let origHome: string;
 let tmpHome: string;
 
 beforeEach(() => {
-  origHome = os.homedir();
   tmpHome = fs.mkdtempSync(path.join("/tmp", "hoist-test-home-"));
   vi.spyOn(os, "homedir").mockReturnValue(tmpHome);
 });
@@ -21,93 +19,110 @@ afterEach(() => {
 });
 
 describe("writeAgentConfig", () => {
-  it("creates Claude skill files in ~/.claude/skills/hoist/", () => {
+  it("creates Claude skill files in ~/.claude/skills/hoist", () => {
     const written = writeAgentConfig();
+
     expect(written).toContain("~/.claude/skills/hoist/SKILL.md");
     expect(written).toContain("~/.claude/skills/hoist/COMMANDS.md");
     expect(fs.existsSync(path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, ".claude", "skills", "hoist", "COMMANDS.md"))).toBe(true);
   });
 
-  it("creates Codex skill files in ~/.agents/skills/hoist/", () => {
+  it("creates Codex skill files in ~/.agents/skills/hoist", () => {
     const written = writeAgentConfig();
+
     expect(written).toContain("~/.agents/skills/hoist/SKILL.md");
     expect(written).toContain("~/.agents/skills/hoist/COMMANDS.md");
     expect(fs.existsSync(path.join(tmpHome, ".agents", "skills", "hoist", "SKILL.md"))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, ".agents", "skills", "hoist", "COMMANDS.md"))).toBe(true);
   });
 
-  it("generates valid Claude skill with frontmatter", () => {
-    writeAgentConfig();
-    const content = fs.readFileSync(
-      path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"),
-      "utf-8"
-    );
-    expect(content).toMatch(/^---\n/);
-    expect(content).toContain("name: managing-infrastructure");
-    expect(content).toContain("description:");
+  it("creates OpenClaw workspace skill files in ~/.openclaw/workspace/skills/hoist", () => {
+    const written = writeAgentConfig();
+
+    expect(written).toContain("~/.openclaw/workspace/skills/hoist/SKILL.md");
+    expect(written).toContain("~/.openclaw/workspace/skills/hoist/COMMANDS.md");
+    expect(fs.existsSync(path.join(tmpHome, ".openclaw", "workspace", "skills", "hoist", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, ".openclaw", "workspace", "skills", "hoist", "COMMANDS.md"))).toBe(true);
   });
 
-  it("generates valid Codex skill with frontmatter", () => {
+  it("generates valid skill frontmatter", () => {
     writeAgentConfig();
+
     const content = fs.readFileSync(
       path.join(tmpHome, ".agents", "skills", "hoist", "SKILL.md"),
       "utf-8"
     );
+
     expect(content).toMatch(/^---\n/);
-    expect(content).toContain("name: managing-infrastructure");
+    expect(content).toContain("name: hoist");
     expect(content).toContain("description:");
+    expect(content).toContain("homepage: https://github.com/g4f4r0/hoist");
   });
 
-  it("COMMANDS.md has full command reference", () => {
+  it("includes OpenClaw binary requirements and npm install metadata", () => {
     writeAgentConfig();
+
     const content = fs.readFileSync(
-      path.join(tmpHome, ".claude", "skills", "hoist", "COMMANDS.md"),
+      path.join(tmpHome, ".agents", "skills", "hoist", "SKILL.md"),
       "utf-8"
     );
-    expect(content).toContain("hoist server create");
-    expect(content).toContain("hoist deploy");
-    expect(content).toContain("hoist template");
-    expect(content).toContain("hoist domain");
-    expect(content).toContain("hoist env");
+
+    expect(content).toContain("\"skillKey\":\"hoist\"");
+    expect(content).toContain("\"requires\":{\"bins\":[\"hoist\"]}");
+    expect(content).toContain("\"kind\":\"node\"");
+    expect(content).toContain("\"package\":\"hoist-cli\"");
   });
 
-  it("SKILL.md references COMMANDS.md for progressive disclosure", () => {
+  it("references COMMANDS.md for progressive disclosure", () => {
     writeAgentConfig();
+
     const content = fs.readFileSync(
       path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"),
       "utf-8"
     );
+
     expect(content).toContain("COMMANDS.md");
   });
 
-  it("includes human-in-the-loop warning", () => {
+  it("includes human-in-the-loop guidance", () => {
     writeAgentConfig();
+
     const content = fs.readFileSync(
       path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"),
       "utf-8"
     );
+
     expect(content).toContain("Sensitive Operations");
     expect(content).toContain("hoist init");
     expect(content).toContain("hoist provider add");
   });
 
-  it("includes decision tree", () => {
+  it("includes the decision tree and hoist.json guidance", () => {
     writeAgentConfig();
+
     const content = fs.readFileSync(
       path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"),
       "utf-8"
     );
+
     expect(content).toContain("Decision Tree");
     expect(content).toContain("hoist.json");
   });
+});
 
-  it("tells agent to read hoist.json for project context", () => {
-    writeAgentConfig();
-    const content = fs.readFileSync(
-      path.join(tmpHome, ".claude", "skills", "hoist", "SKILL.md"),
-      "utf-8"
-    );
-    expect(content).toContain("Read `hoist.json`");
+describe("writePublishedSkillBundle", () => {
+  it("writes a publishable bundle with all skill files", () => {
+    const targetDir = path.join(tmpHome, "skills", "hoist");
+    const written = writePublishedSkillBundle(targetDir);
+
+    expect(written).toEqual([
+      path.join(targetDir, "SKILL.md"),
+      path.join(targetDir, "COMMANDS.md"),
+      path.join(targetDir, "DOCKERFILES.md"),
+    ]);
+    expect(fs.existsSync(path.join(targetDir, "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, "COMMANDS.md"))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, "DOCKERFILES.md"))).toBe(true);
   });
 });

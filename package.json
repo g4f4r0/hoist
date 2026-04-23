@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:skills": "npm run build && node dist/cli.js skills export ./skills/hoist",
     "dev": "tsup --watch",
     "start": "node dist/cli.js",
     "lint": "eslint src/",
